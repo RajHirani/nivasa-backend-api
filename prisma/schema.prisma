@@ -1,0 +1,20 @@
+// Prisma Schema File
+// https://pris.ly/d/prisma-schema
+
+// This project uses Liquibase for database migrations.
+// Prisma is used ONLY as an ORM for querying the database.
+// DO NOT use `prisma migrate` — use `prisma db pull` to introspect
+// the existing schema after Liquibase migrations have been applied.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// After running Liquibase migrations, run:
+//   npm run db:pull      — to introspect the DB and update this schema
+//   npm run db:generate  — to regenerate the Prisma Client
