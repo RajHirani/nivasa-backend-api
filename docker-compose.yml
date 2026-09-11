@@ -12,7 +12,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - nivasa_dbdata:/var/lib/postgresql/data
+      - ../nivasa_dbdata:/var/lib/postgresql/data
 
 volumes:
   nivasa_dbdata:
