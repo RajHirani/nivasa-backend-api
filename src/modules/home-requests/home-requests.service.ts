@@ -1,0 +1,178 @@
+import { Prisma } from '@prisma/client';
+import { buildingDto, flatDto, lower, unitInclude } from '../../lib/dto.js';
+import { prisma } from '../../lib/prisma.js';
+import { ApiError } from '../../utils/api-error.js';
+import { decodeCursor, encodeCursor } from '../../utils/cursor.js';
+import { toUploadDto } from '../uploads/uploads.service.js';
+import type { HomeRequestDto } from './home-requests.types.js';
+
+const requestInclude = {
+  request_status: { select: { code: true } },
+  resident_role: { select: { code: true } },
+  resident_relation: { select: { code: true, name: true } },
+  occupancy_status: { select: { code: true } },
+  app_user_home_request_user_idToapp_user: { select: { id: true, full_name: true } },
+  app_user_home_request_reviewed_byToapp_user: { select: { id: true, full_name: true } },
+  structure: { select: { id: true, identifier: true, floor_number: true, ...unitInclude } },
+  home_request_document: {
+    orderBy: { created_at: 'asc' },
+    include: { upload: { include: { upload_purpose: { select: { code: true } } } } },
+  },
+} satisfies Prisma.home_requestInclude;
+
+type RequestRow = Prisma.home_requestGetPayload<{ include: typeof requestInclude }>;
+
+const day = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+
+const toDto = async (r: RequestRow): Promise<HomeRequestDto> => {
+  const applicant = r.app_user_home_request_user_idToapp_user;
+  const reviewer = r.app_user_home_request_reviewed_byToapp_user;
+  const dated = r.home_request_document.map((d) => d.upload).find((u) => u.agreement_start || u.agreement_end);
+  return {
+    requestId: r.id.toString(),
+    status: lower(r.request_status.code) as HomeRequestDto['status'],
+    rejectionReason: r.rejection_reason,
+    applicant: { id: applicant.id.toString(), name: applicant.full_name },
+    role: lower(r.resident_role.code),
+    relation: lower(r.resident_relation.code),
+    relationLabel: r.resident_relation.name,
+    occupancy: lower(r.occupancy_status.code),
+    building: buildingDto(r.structure),
+    flat: flatDto(r.structure),
+    agreementStart: day(dated?.agreement_start ?? null),
+    agreementEnd: day(dated?.agreement_end ?? null),
+    documents: await Promise.all(r.home_request_document.map((d) => toUploadDto(d.upload))),
+    createdAt: r.created_at.toISOString(),
+    decidedAt: r.reviewed_at?.toISOString() ?? null,
+    reviewedBy: reviewer ? { id: reviewer.id.toString(), name: reviewer.full_name } : null,
+  };
+};
+
+// Only requests of the active society are visible; anything else is simply "not found".
+const loadRequest = async (societyId: bigint, requestId: bigint): Promise<RequestRow> => {
+  const row = await prisma.home_request.findFirst({
+    where: { id: requestId, society_id: societyId, request_status: { code: { not: 'CANCELLED' } } },
+    include: requestInclude,
+  });
+  if (!row) throw new ApiError(404, 'NOT_FOUND', 'Home request not found');
+  return row;
+};
+
+export const getRequest = async (societyId: bigint, requestId: bigint): Promise<HomeRequestDto> =>
+  toDto(await loadRequest(societyId, requestId));
+
+// Oldest first, so the queue is worked in the order people applied.
+export const listRequests = async (societyId: bigint, status: string, limit: number, cursor?: string) => {
+  const after = decodeCursor<{ t: string; i: string }>(cursor);
+  if (cursor && !after) throw new ApiError(400, 'VALIDATION_FAILED', 'Invalid input', [{ field: 'cursor', message: 'Invalid cursor' }]);
+  const afterAt = after ? new Date(after.t) : null;
+
+  const rows = await prisma.home_request.findMany({
+    where: {
+      society_id: societyId,
+      request_status: { code: status.toUpperCase() },
+      ...(after && afterAt
+        ? { OR: [{ created_at: { gt: afterAt } }, { created_at: afterAt, id: { gt: BigInt(after.i) } }] }
+        : {}),
+    },
+    orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
+    take: limit + 1,
+    include: requestInclude,
+  });
+  const page = rows.slice(0, limit);
+  const last = page[page.length - 1];
+  return {
+    items: await Promise.all(page.map(toDto)),
+    nextCursor: rows.length > limit && last ? encodeCursor({ t: last.created_at.toISOString(), i: last.id.toString() }) : null,
+  };
+};
+
+const notPending = () => new ApiError(409, 'REQUEST_NOT_PENDING', 'This request has already been reviewed');
+
+// One transaction: the request is decided, the resident record is created and the person becomes a member of the society.
+export const approveRequest = async (societyId: bigint, reviewerId: bigint, requestId: bigint): Promise<HomeRequestDto> => {
+  try {
+    await prisma.$transaction(async (tx) => {
+      const request = await tx.home_request.findFirst({
+        where: { id: requestId, society_id: societyId },
+        select: {
+          user_id: true,
+          unit_id: true,
+          resident_role_id: true,
+          resident_relation_id: true,
+          occupancy_status_id: true,
+          request_status: { select: { code: true } },
+        },
+      });
+      if (!request || request.request_status.code === 'CANCELLED') throw new ApiError(404, 'NOT_FOUND', 'Home request not found');
+      if (request.request_status.code !== 'PENDING') throw notPending();
+
+      const [approved, activeStatus] = await Promise.all([
+        tx.request_status.findUniqueOrThrow({ where: { code: 'APPROVED' }, select: { id: true } }),
+        tx.member_status.findUniqueOrThrow({ where: { code: 'ACTIVE' }, select: { id: true } }),
+      ]);
+
+      // The status guard makes two reviewers (or a cancel at the same moment) decide the request only once.
+      const now = new Date();
+      const decided = await tx.home_request.updateMany({
+        where: { id: requestId, request_status: { code: 'PENDING' } },
+        data: { request_status_id: approved.id, reviewed_by: reviewerId, reviewed_at: now, rejection_reason: null, updated_at: now },
+      });
+      if (decided.count === 0) throw notPending();
+
+      const current = await tx.user_resident_map.findFirst({
+        where: { user_id: request.user_id, unit_id: request.unit_id, move_out_date: null },
+        select: { id: true },
+      });
+      if (current) throw new ApiError(409, 'HOME_ALREADY_REQUESTED', 'This person already lives in this flat');
+
+      // A blocked member keeps the block: the home is recorded but stays inactive until the society reactivates them.
+      const membership = await tx.user_society_map.findFirst({
+        where: { user_id: request.user_id, society_id: societyId, left_at: null },
+        select: { member_status: { select: { code: true } } },
+      });
+      if (!membership) {
+        await tx.user_society_map.create({
+          data: { user_id: request.user_id, society_id: societyId, member_status_id: activeStatus.id, added_by: reviewerId },
+        });
+      }
+      await tx.user_resident_map.create({
+        data: {
+          user_id: request.user_id,
+          unit_id: request.unit_id,
+          society_id: societyId,
+          resident_role_id: request.resident_role_id,
+          resident_relation_id: request.resident_relation_id,
+          occupancy_status_id: request.occupancy_status_id,
+          home_request_id: requestId,
+          is_active: !membership || membership.member_status.code === 'ACTIVE',
+        },
+      });
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      throw new ApiError(409, 'HOME_ALREADY_REQUESTED', 'This person already lives in this flat');
+    }
+    throw e;
+  }
+  return getRequest(societyId, requestId);
+};
+
+export const rejectRequest = async (
+  societyId: bigint,
+  reviewerId: bigint,
+  requestId: bigint,
+  reason: string,
+): Promise<HomeRequestDto> => {
+  const current = await loadRequest(societyId, requestId);
+  if (current.request_status.code !== 'PENDING') throw notPending();
+
+  const rejected = await prisma.request_status.findUniqueOrThrow({ where: { code: 'REJECTED' }, select: { id: true } });
+  const now = new Date();
+  const decided = await prisma.home_request.updateMany({
+    where: { id: requestId, society_id: societyId, request_status: { code: 'PENDING' } },
+    data: { request_status_id: rejected.id, rejection_reason: reason, reviewed_by: reviewerId, reviewed_at: now, updated_at: now },
+  });
+  if (decided.count === 0) throw notPending();
+  return getRequest(societyId, requestId);
+};

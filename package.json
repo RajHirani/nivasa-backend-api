@@ -1,38 +1,38 @@
 {
-  "name": "backend-api",
+  "name": "nivasa-backend-api",
   "version": "1.0.0",
-  "main": "dist/index.js",
+  "private": true,
   "type": "module",
-  "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsup src/index.ts --format esm --clean",
-    "start": "node dist/index.js",
-    "db:pull": "prisma db pull",
-    "db:generate": "prisma generate",
-    "db:sync": "npm run db:pull && npm run db:generate",
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "engines": {
+    "node": ">=20"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "Nivasa Backend API - Node.js + Express + TypeScript + Prisma",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "db:sync": "prisma db pull && prisma generate"
+  },
   "dependencies": {
-    "@prisma/client": "^6.0.0",
-    "bcryptjs": "^3.0.3",
-    "dotenv": "^17.4.2",
+    "@prisma/client": "^6.19.3",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.6",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.1",
+    "file-type": "^22.1.1",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
-    "pg": "^8.23.0"
+    "multer": "^2.4.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^22.20.2",
-    "@types/pg": "^8.23.1",
-    "prisma": "^6.0.0",
-    "tsup": "^8.5.1",
-    "tsx": "^4.23.13",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^26.6.4",
+    "prisma": "^8.0.0-rc.21",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }

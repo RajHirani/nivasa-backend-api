@@ -7,6 +7,71 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model app_user {
+  id                                                   BigInt              @id @default(autoincrement())
+  full_name                                            String              @db.VarChar(120)
+  phone                                                String              @unique(map: "uq_app_user_phone") @db.VarChar(20)
+  email                                                String?             @db.VarChar(120)
+  terms_accepted_at                                    DateTime?           @db.Timestamptz(6)
+  terms_version                                        String?             @db.VarChar(20)
+  is_active                                            Boolean             @default(true)
+  created_at                                           DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at                                           DateTime            @default(now()) @db.Timestamptz(6)
+  auth_session                                         auth_session[]
+  home_request_home_request_reviewed_byToapp_user      home_request[]      @relation("home_request_reviewed_byToapp_user")
+  home_request_home_request_user_idToapp_user          home_request[]      @relation("home_request_user_idToapp_user")
+  role                                                 role[]
+  upload                                               upload[]
+  user_resident_map                                    user_resident_map[]
+  user_role_user_role_ended_byToapp_user               user_role[]         @relation("user_role_ended_byToapp_user")
+  user_role_user_role_granted_byToapp_user             user_role[]         @relation("user_role_granted_byToapp_user")
+  user_role_user_role_user_idToapp_user                user_role[]         @relation("user_role_user_idToapp_user")
+  user_society_map_user_society_map_added_byToapp_user user_society_map[]  @relation("user_society_map_added_byToapp_user")
+  user_society_map_user_society_map_user_idToapp_user  user_society_map[]  @relation("user_society_map_user_idToapp_user")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model auth_session {
+  id                 BigInt           @id @default(autoincrement())
+  user_id            BigInt
+  device_platform_id Int?             @db.SmallInt
+  device_name        String?          @db.VarChar(100)
+  app_version        String?          @db.VarChar(20)
+  ip_address         String?          @db.VarChar(45)
+  created_at         DateTime         @default(now()) @db.Timestamptz(6)
+  last_used_at       DateTime         @default(now()) @db.Timestamptz(6)
+  revoked_at         DateTime?        @db.Timestamptz(6)
+  device_platform    device_platform? @relation(fields: [device_platform_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user           app_user         @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  refresh_token      refresh_token[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model city {
+  id           BigInt    @id @default(autoincrement())
+  country_id   BigInt
+  name         String
+  is_popular   Boolean   @default(false)
+  popular_rank Int?      @db.SmallInt
+  is_active    Boolean   @default(true)
+  country      country   @relation(fields: [country_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society      society[]
+
+  @@unique([country_id, name], map: "uq_city_country_name")
+  @@unique([id, country_id], map: "uq_city_id_country")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model country {
+  id        BigInt  @id @default(autoincrement())
+  name      String
+  iso_code  String  @unique @db.Char(2)
+  dial_code String  @db.VarChar(8)
+  is_active Boolean @default(false)
+  city      city[]
+}
+
 /// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
 model databasechangelog {
   id            String   @db.VarChar(255)
@@ -34,62 +99,391 @@ model databasechangeloglock {
   lockedby    String?   @db.VarChar(255)
 }
 
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model orders {
-  id               BigInt   @id @default(autoincrement())
-  order_number     String   @unique @db.VarChar(50)
-  user_id          BigInt
-  status           String   @default("PENDING") @db.VarChar(30)
-  total_amount     Decimal  @default(0.00) @db.Decimal(12, 2)
-  currency         String   @default("INR") @db.VarChar(3)
-  shipping_address String?
-  notes            String?
-  ordered_at       DateTime @default(now()) @db.Timestamp(6)
-  created_at       DateTime @default(now()) @db.Timestamp(6)
-  updated_at       DateTime @default(now()) @db.Timestamp(6)
-  users            users    @relation(fields: [user_id], references: [id], map: "fk_orders_user")
-
-  @@index([order_number], map: "idx_orders_order_number")
-  @@index([status], map: "idx_orders_status")
-  @@index([user_id], map: "idx_orders_user_id")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model products {
-  id             BigInt   @id @default(autoincrement())
-  sku            String   @unique @db.VarChar(50)
-  name           String   @db.VarChar(255)
-  description    String?
-  category       String   @db.VarChar(100)
-  price          Decimal  @default(0.00) @db.Decimal(10, 2)
-  currency       String   @default("INR") @db.VarChar(3)
-  stock_quantity Int      @default(0)
-  is_available   Boolean  @default(true)
-  image_url      String?  @db.VarChar(500)
-  created_at     DateTime @default(now()) @db.Timestamp(6)
-  updated_at     DateTime @default(now()) @db.Timestamp(6)
-
-  @@index([is_available], map: "idx_products_available")
-  @@index([category], map: "idx_products_category")
-  @@index([sku], map: "idx_products_sku")
+model device_platform {
+  id           Int            @id @db.SmallInt
+  code         String         @unique
+  name         String
+  sort_order   Int            @default(0) @db.SmallInt
+  is_active    Boolean        @default(true)
+  auth_session auth_session[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model users {
-  id            BigInt   @id @default(autoincrement())
-  username      String   @unique @db.VarChar(100)
-  email         String   @unique @db.VarChar(255)
-  password_hash String   @db.VarChar(255)
-  first_name    String?  @db.VarChar(100)
-  last_name     String?  @db.VarChar(100)
-  phone         String?  @db.VarChar(20)
-  is_active     Boolean  @default(true)
-  created_at    DateTime @default(now()) @db.Timestamp(6)
-  updated_at    DateTime @default(now()) @db.Timestamp(6)
-  orders        orders[]
+model home_request {
+  id                                          BigInt                  @id @default(autoincrement())
+  user_id                                     BigInt
+  society_id                                  BigInt
+  unit_id                                     BigInt
+  resident_role_id                            Int                     @db.SmallInt
+  resident_relation_id                        Int                     @db.SmallInt
+  occupancy_status_id                         Int                     @db.SmallInt
+  request_status_id                           Int                     @db.SmallInt
+  rejection_reason                            String?
+  reviewed_by                                 BigInt?
+  reviewed_at                                 DateTime?               @db.Timestamptz(6)
+  created_at                                  DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at                                  DateTime                @default(now()) @db.Timestamptz(6)
+  occupancy_status                            occupancy_status        @relation(fields: [occupancy_status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  request_status                              request_status          @relation(fields: [request_status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resident_relation                           resident_relation       @relation(fields: [resident_relation_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resident_role                               resident_role           @relation(fields: [resident_role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_home_request_reviewed_byToapp_user app_user?               @relation("home_request_reviewed_byToapp_user", fields: [reviewed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society                                     society                 @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  structure                                   structure               @relation(fields: [unit_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_home_request_user_idToapp_user     app_user                @relation("home_request_user_idToapp_user", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  home_request_document                       home_request_document[]
+  user_resident_map                           user_resident_map[]
 
-  @@index([email], map: "idx_users_email")
-  @@index([username], map: "idx_users_username")
+  @@index([society_id, request_status_id], map: "idx_home_request_society_status")
+  @@index([unit_id], map: "idx_home_request_unit")
+  @@index([user_id], map: "idx_home_request_user")
+}
+
+model home_request_document {
+  home_request_id BigInt
+  upload_id       BigInt
+  created_at      DateTime     @default(now()) @db.Timestamptz(6)
+  home_request    home_request @relation(fields: [home_request_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  upload          upload       @relation(fields: [upload_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([home_request_id, upload_id])
+  @@index([upload_id], map: "idx_home_request_document_upload")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model member_status {
+  id               Int                @id @db.SmallInt
+  code             String             @unique
+  name             String
+  sort_order       Int                @default(0) @db.SmallInt
+  is_active        Boolean            @default(true)
+  user_society_map user_society_map[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model occupancy_status {
+  id                Int                 @id @db.SmallInt
+  code              String              @unique
+  name              String
+  is_living         Boolean             @default(false)
+  sort_order        Int                 @default(0) @db.SmallInt
+  is_active         Boolean             @default(true)
+  home_request      home_request[]
+  user_resident_map user_resident_map[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model otp_purpose {
+  id          Int           @id @db.SmallInt
+  code        String        @unique
+  name        String
+  sort_order  Int           @default(0) @db.SmallInt
+  is_active   Boolean       @default(true)
+  otp_request otp_request[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model otp_request {
+  id             BigInt      @id @default(autoincrement())
+  phone          String      @db.VarChar(20)
+  otp_purpose_id Int         @db.SmallInt
+  code_hash      String      @db.VarChar(128)
+  pending_name   String?     @db.VarChar(120)
+  pending_email  String?     @db.VarChar(120)
+  terms_version  String?     @db.VarChar(20)
+  attempts       Int         @default(0) @db.SmallInt
+  expires_at     DateTime    @db.Timestamptz(6)
+  verified_at    DateTime?   @db.Timestamptz(6)
+  created_at     DateTime    @default(now()) @db.Timestamptz(6)
+  otp_purpose    otp_purpose @relation(fields: [otp_purpose_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([expires_at], map: "idx_otp_request_expires")
+  @@index([phone, created_at(sort: Desc)], map: "idx_otp_request_phone_created")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model permission {
+  id              Int               @id @db.SmallInt
+  code            String            @unique
+  name            String
+  module          String
+  role_scope_id   Int               @db.SmallInt
+  sort_order      Int               @default(0) @db.SmallInt
+  is_active       Boolean           @default(true)
+  role_scope      role_scope        @relation(fields: [role_scope_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role_permission role_permission[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model refresh_token {
+  id              BigInt       @id @default(autoincrement())
+  auth_session_id BigInt
+  token_hash      String       @unique(map: "uq_refresh_token_hash") @db.VarChar(128)
+  expires_at      DateTime     @db.Timestamptz(6)
+  used_at         DateTime?    @db.Timestamptz(6)
+  created_at      DateTime     @default(now()) @db.Timestamptz(6)
+  auth_session    auth_session @relation(fields: [auth_session_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([expires_at], map: "idx_refresh_token_expires")
+  @@index([auth_session_id], map: "idx_refresh_token_session")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model request_status {
+  id           Int            @id @db.SmallInt
+  code         String         @unique
+  name         String
+  sort_order   Int            @default(0) @db.SmallInt
+  is_active    Boolean        @default(true)
+  home_request home_request[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model resident_relation {
+  id                Int                 @id @db.SmallInt
+  code              String              @unique
+  name              String
+  description       String?
+  sort_order        Int                 @default(0) @db.SmallInt
+  is_active         Boolean             @default(true)
+  home_request      home_request[]
+  user_resident_map user_resident_map[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model resident_role {
+  id                Int                 @id @db.SmallInt
+  code              String              @unique
+  name              String
+  sort_order        Int                 @default(0) @db.SmallInt
+  is_active         Boolean             @default(true)
+  home_request      home_request[]
+  user_resident_map user_resident_map[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model role {
+  id              Int               @id @default(autoincrement())
+  code            String
+  name            String
+  role_scope_id   Int               @db.SmallInt
+  society_id      BigInt?
+  is_assignable   Boolean           @default(true)
+  is_super_admin  Boolean           @default(false)
+  sort_order      Int               @default(0) @db.SmallInt
+  created_by      BigInt?
+  is_active       Boolean           @default(true)
+  created_at      DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime          @default(now()) @db.Timestamptz(6)
+  app_user        app_user?         @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role_scope      role_scope        @relation(fields: [role_scope_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society         society?          @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role_permission role_permission[]
+  user_role       user_role[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model role_permission {
+  role_id       Int
+  permission_id Int        @db.SmallInt
+  created_at    DateTime   @default(now()) @db.Timestamptz(6)
+  permission    permission @relation(fields: [permission_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role          role       @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([role_id, permission_id])
+  @@index([permission_id], map: "idx_role_permission_permission")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model role_scope {
+  id         Int          @id @db.SmallInt
+  code       String       @unique
+  name       String
+  sort_order Int          @default(0) @db.SmallInt
+  is_active  Boolean      @default(true)
+  permission permission[]
+  role       role[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model society {
+  id                  BigInt              @id @default(autoincrement())
+  name                String              @db.VarChar(150)
+  society_type_id     Int                 @db.SmallInt
+  country_id          BigInt
+  city_id             BigInt
+  address             String?
+  pincode             String?             @db.VarChar(12)
+  latitude            Decimal?            @db.Decimal(9, 6)
+  longitude           Decimal?            @db.Decimal(9, 6)
+  registration_number String?             @db.VarChar(50)
+  is_active           Boolean             @default(true)
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime            @default(now()) @db.Timestamptz(6)
+  home_request        home_request[]
+  role                role[]
+  city                city                @relation(fields: [city_id, country_id], references: [id, country_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_society_city_country")
+  society_type        society_type        @relation(fields: [society_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  structure           structure[]
+  user_resident_map   user_resident_map[]
+  user_role           user_role[]
+  user_society_map    user_society_map[]
+
+  @@index([country_id], map: "idx_society_country")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model society_type {
+  id         Int       @id @db.SmallInt
+  code       String    @unique
+  name       String
+  sort_order Int       @default(0) @db.SmallInt
+  is_active  Boolean   @default(true)
+  society    society[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model structure {
+  id                                               BigInt              @id @default(autoincrement())
+  society_id                                       BigInt
+  parent_id                                        BigInt?
+  structure_type_id                                Int                 @db.SmallInt
+  identifier                                       String              @db.VarChar(50)
+  floor_number                                     Int?                @db.SmallInt
+  sort_order                                       Int                 @default(0)
+  building_id                                      BigInt?
+  floor_id                                         BigInt?
+  full_address                                     String?
+  is_active                                        Boolean             @default(true)
+  created_at                                       DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at                                       DateTime            @default(now()) @db.Timestamptz(6)
+  home_request                                     home_request[]
+  structure_structure_building_idTostructure       structure?          @relation("structure_building_idTostructure", fields: [building_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_structure_structure_building_idTostructure structure[]         @relation("structure_building_idTostructure")
+  structure_structure_floor_idTostructure          structure?          @relation("structure_floor_idTostructure", fields: [floor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_structure_structure_floor_idTostructure    structure[]         @relation("structure_floor_idTostructure")
+  structure_structure_parent_idTostructure         structure?          @relation("structure_parent_idTostructure", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_structure_structure_parent_idTostructure   structure[]         @relation("structure_parent_idTostructure")
+  society                                          society             @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  structure_type                                   structure_type      @relation(fields: [structure_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user_resident_map                                user_resident_map[]
+
+  @@index([building_id], map: "idx_structure_building")
+  @@index([floor_id], map: "idx_structure_floor")
+  @@index([parent_id], map: "idx_structure_parent")
+  @@index([society_id, structure_type_id, sort_order], map: "idx_structure_society_type")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model structure_type {
+  id          Int         @id @db.SmallInt
+  code        String      @unique
+  name        String
+  is_building Boolean     @default(false)
+  is_unit     Boolean     @default(false)
+  sort_order  Int         @default(0) @db.SmallInt
+  is_active   Boolean     @default(true)
+  structure   structure[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model upload {
+  id                    BigInt                  @id @default(autoincrement())
+  user_id               BigInt
+  upload_purpose_id     Int                     @db.SmallInt
+  file_name             String                  @db.VarChar(255)
+  content_type          String                  @db.VarChar(100)
+  size_bytes            BigInt
+  storage_key           String                  @unique(map: "uq_upload_storage_key") @db.VarChar(500)
+  agreement_start       DateTime?               @db.Date
+  agreement_end         DateTime?               @db.Date
+  attached_at           DateTime?               @db.Timestamptz(6)
+  created_at            DateTime                @default(now()) @db.Timestamptz(6)
+  home_request_document home_request_document[]
+  upload_purpose        upload_purpose          @relation(fields: [upload_purpose_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user              app_user                @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_upload_user")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model upload_purpose {
+  id         Int      @id @db.SmallInt
+  code       String   @unique
+  name       String
+  sort_order Int      @default(0) @db.SmallInt
+  is_active  Boolean  @default(true)
+  upload     upload[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_resident_map {
+  id                   BigInt            @id @default(autoincrement())
+  user_id              BigInt
+  unit_id              BigInt
+  society_id           BigInt
+  resident_role_id     Int               @db.SmallInt
+  resident_relation_id Int               @db.SmallInt
+  occupancy_status_id  Int               @db.SmallInt
+  home_request_id      BigInt?
+  move_in_date         DateTime?         @db.Date
+  move_out_date        DateTime?         @db.Date
+  is_active            Boolean           @default(true)
+  created_at           DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime          @default(now()) @db.Timestamptz(6)
+  home_request         home_request?     @relation(fields: [home_request_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  occupancy_status     occupancy_status  @relation(fields: [occupancy_status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resident_relation    resident_relation @relation(fields: [resident_relation_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resident_role        resident_role     @relation(fields: [resident_role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society              society           @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  structure            structure         @relation(fields: [unit_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user             app_user          @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([society_id, occupancy_status_id], map: "idx_user_resident_society_occupancy")
+  @@index([unit_id], map: "idx_user_resident_unit")
+  @@index([user_id], map: "idx_user_resident_user")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_role {
+  id                                      BigInt    @id @default(autoincrement())
+  user_id                                 BigInt
+  role_id                                 Int
+  society_id                              BigInt?
+  start_date                              DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
+  end_date                                DateTime? @db.Date
+  granted_by                              BigInt?
+  ended_by                                BigInt?
+  created_at                              DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                              DateTime  @default(now()) @db.Timestamptz(6)
+  app_user_user_role_ended_byToapp_user   app_user? @relation("user_role_ended_byToapp_user", fields: [ended_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_user_role_granted_byToapp_user app_user? @relation("user_role_granted_byToapp_user", fields: [granted_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role                                    role      @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society                                 society?  @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_user_role_user_idToapp_user    app_user  @relation("user_role_user_idToapp_user", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([society_id, role_id], map: "idx_user_role_society_role")
+  @@index([user_id], map: "idx_user_role_user")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_society_map {
+  id                                           BigInt        @id @default(autoincrement())
+  user_id                                      BigInt
+  society_id                                   BigInt
+  member_status_id                             Int           @db.SmallInt
+  joined_at                                    DateTime      @default(now()) @db.Timestamptz(6)
+  left_at                                      DateTime?     @db.Timestamptz(6)
+  added_by                                     BigInt?
+  created_at                                   DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at                                   DateTime      @default(now()) @db.Timestamptz(6)
+  app_user_user_society_map_added_byToapp_user app_user?     @relation("user_society_map_added_byToapp_user", fields: [added_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  member_status                                member_status @relation(fields: [member_status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society                                      society       @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_user_society_map_user_idToapp_user  app_user      @relation("user_society_map_user_idToapp_user", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([society_id, member_status_id], map: "idx_user_society_society_status")
+  @@index([user_id], map: "idx_user_society_user")
 }

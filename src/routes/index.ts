@@ -1,11 +1,19 @@
-import { Router } from "express";
-import authRoutes from "./auth.routes";
-import healthRoutes from "./health.routes";
+import { Router } from 'express';
+import { healthRouter } from './health.js';
+import { authRouter } from '../modules/auth/auth.routes.js';
+import { uploadsRouter, filesRouter } from '../modules/uploads/uploads.routes.js';
+import { locationsRouter } from '../modules/locations/locations.routes.js';
+import { homesRouter } from '../modules/homes/homes.routes.js';
+import { meRouter } from '../modules/me/me.routes.js';
+import { homeRequestsRouter } from '../modules/home-requests/home-requests.routes.js';
 
-const router = Router();
+export const apiRouter = Router();
 
-// Mount route groups
-router.use("/auth", authRoutes);
-router.use("/health", healthRoutes);
-
-export default router;
+apiRouter.use('/health', healthRouter);
+apiRouter.use('/auth', authRouter);
+apiRouter.use('/me', meRouter);
+apiRouter.use('/uploads', uploadsRouter);
+apiRouter.use('/files', filesRouter);
+apiRouter.use(locationsRouter);
+apiRouter.use('/homes', homesRouter);
+apiRouter.use('/home-requests', homeRequestsRouter);

@@ -1,25 +1,6 @@
-# Dependencies
-node_modules/
-
-# Build output
-dist/
-
-# Environment variables
+node_modules
+dist
 .env
-.env.local
-.env.*.local
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
 *.log
-npm-debug.log*
-
-# Prisma
-# Keep schema.prisma tracked, but ignore generated client in node_modules
+.DS_Store
+storage/
