@@ -12,13 +12,13 @@ model app_user {
   id                                                       BigInt                       @id @default(autoincrement())
   full_name                                                String                       @db.VarChar(120)
   phone                                                    String                       @unique(map: "uq_app_user_phone") @db.VarChar(20)
+  country_id                                               BigInt
   email                                                    String?                      @db.VarChar(120)
   terms_accepted_at                                        DateTime?                    @db.Timestamptz(6)
   terms_version                                            String?                      @db.VarChar(20)
   is_active                                                Boolean                      @default(true)
   created_at                                               DateTime                     @default(now()) @db.Timestamptz(6)
   updated_at                                               DateTime                     @default(now()) @db.Timestamptz(6)
-  country_id                                               BigInt
   country                                                  country                      @relation(fields: [country_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   auth_session                                             auth_session[]
   home_request_home_request_reviewed_byToapp_user          home_request[]               @relation("home_request_reviewed_byToapp_user")
@@ -253,9 +253,9 @@ model resident_relation {
   code              String              @unique
   name              String
   description       String?
+  label             String
   sort_order        Int                 @default(0) @db.SmallInt
   is_active         Boolean             @default(true)
-  label             String
   home_request      home_request[]
   user_resident_map user_resident_map[]
 }
@@ -427,10 +427,10 @@ model upload_purpose {
   id                    Int      @id @db.SmallInt
   code                  String   @unique
   name                  String
-  sort_order            Int      @default(0) @db.SmallInt
-  is_active             Boolean  @default(true)
   allowed_content_types String[]
   max_mb                Int      @db.SmallInt
+  sort_order            Int      @default(0) @db.SmallInt
+  is_active             Boolean  @default(true)
   upload                upload[]
 }
 
@@ -579,17 +579,17 @@ model society_contact {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model user_society_role {
-  id                                              BigInt    @id(map: "user_role_pkey") @default(autoincrement())
+  id                                              BigInt    @id @default(autoincrement())
   user_id                                         BigInt
   role_id                                         Int
   society_id                                      BigInt?
   start_date                                      DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
   end_date                                        DateTime? @db.Date
+  is_active                                       Boolean   @default(true)
   granted_by                                      BigInt?
   ended_by                                        BigInt?
   created_at                                      DateTime  @default(now()) @db.Timestamptz(6)
   updated_at                                      DateTime  @default(now()) @db.Timestamptz(6)
-  is_active                                       Boolean   @default(true)
   app_user_user_society_role_ended_byToapp_user   app_user? @relation("user_society_role_ended_byToapp_user", fields: [ended_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_ended_by_fkey")
   app_user_user_society_role_granted_byToapp_user app_user? @relation("user_society_role_granted_byToapp_user", fields: [granted_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_granted_by_fkey")
   role                                            role      @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_role_id_fkey")
