@@ -4,7 +4,7 @@ import type { BuildingDto, FlatDto } from '../me/me.types.js';
 // What a reviewer sees. The applicant's phone number is never part of it.
 export interface HomeRequestDto {
   requestId: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: string; // request_status.code: PENDING, APPROVED, REJECTED
   rejectionReason: string | null;
   applicant: { id: string; name: string };
   role: string;

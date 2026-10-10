@@ -8,5 +8,4 @@ export const homesRouter = Router();
 homesRouter.get('/', authenticate, controller.list);
 homesRouter.post('/', authenticate, controller.create);
 homesRouter.get('/:requestId', authenticate, controller.get);
-homesRouter.put('/:requestId', authenticate, controller.resubmit);
 homesRouter.delete('/:requestId', authenticate, controller.cancel);

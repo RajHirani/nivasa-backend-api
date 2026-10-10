@@ -34,3 +34,9 @@ export const requirePermission = (code: string): RequestHandler => (req, _res, n
   if (!req.society?.permissions.has(code)) throw new ApiError(403, 'FORBIDDEN', 'You are not allowed to do this');
   next();
 };
+
+// Passes when the caller has at least one of the permissions.
+export const requireAnyPermission = (...codes: string[]): RequestHandler => (req, _res, next) => {
+  if (!codes.some((c) => req.society?.permissions.has(c))) throw new ApiError(403, 'FORBIDDEN', 'You are not allowed to do this');
+  next();
+};

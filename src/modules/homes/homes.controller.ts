@@ -15,11 +15,6 @@ export const create: RequestHandler = async (req, res) => {
   res.status(201).json(await service.createHome(req.auth!.userId, homeRequestSchema.parse(req.body)));
 };
 
-export const resubmit: RequestHandler = async (req, res) => {
-  const { requestId } = requestParamsSchema.parse(req.params);
-  res.json(await service.resubmitHome(req.auth!.userId, BigInt(requestId), homeRequestSchema.parse(req.body)));
-};
-
 export const cancel: RequestHandler = async (req, res) => {
   const { requestId } = requestParamsSchema.parse(req.params);
   await service.cancelHome(req.auth!.userId, BigInt(requestId));

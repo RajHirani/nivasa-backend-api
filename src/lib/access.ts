@@ -10,11 +10,10 @@ export interface SocietyAccess {
   permissions: string[];
 }
 
-const today = () => new Date(new Date().toISOString().slice(0, 10));
 
 // Roles and permissions of a user inside each given society (the caller has already established active membership).
 // permissions = platform roles ∪ the society's roles ∪ RESIDENT's permissions when the user has a current home there.
-// A super admin role (PLATFORM_ADMIN) gets every society permission. RESIDENT is derived, never stored in user_role.
+// A super admin role (PLATFORM_ADMIN) gets every society permission. RESIDENT is derived, never stored in user_society_role.
 export const loadAccess = async (
   userId: bigint,
   societyIds: bigint[],
@@ -24,14 +23,13 @@ export const loadAccess = async (
   if (societyIds.length === 0) return result;
 
   const [assignments, residentRole, allPermissions] = await Promise.all([
-    prisma.user_role.findMany({
+    prisma.user_society_role.findMany({
       where: {
         user_id: userId,
+        is_active: true,
+        end_date: null,
         role: { is_active: true },
-        AND: [
-          { OR: [{ end_date: null }, { end_date: { gte: today() } }] },
-          { OR: [{ society_id: null }, { society_id: { in: societyIds } }] },
-        ],
+        OR: [{ society_id: null }, { society_id: { in: societyIds } }],
       },
       select: {
         society_id: true,

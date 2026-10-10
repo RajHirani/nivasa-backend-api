@@ -41,4 +41,3 @@ export const buildingDto = (u: UnitRow): BuildingDto | null => {
 
 export const flatDto = (u: UnitRow): FlatDto => ({ id: u.id.toString(), code: u.identifier, floor: u.structure_structure_floor_idTostructure?.floor_number ?? u.floor_number });
 
-export const lower = (code: string): string => code.toLowerCase();

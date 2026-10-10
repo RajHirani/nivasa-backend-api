@@ -4,14 +4,15 @@ import { prisma } from '../../lib/prisma.js';
 import { ApiError } from '../../utils/api-error.js';
 import { toE164 } from '../../utils/phone.js';
 import { env } from '../../config/env.js';
-import { sendOtpSms } from '../../lib/sms.js';
+import { sendOtpEmail } from '../../lib/email/index.js';
+import { sendOtpSms } from '../../lib/sms/index.js';
 import { generateOtp, hashOtp, OTP_PURPOSE } from '../../utils/otp.js';
 import { hashToken, newRefreshToken, signAccessToken } from '../../lib/tokens.js';
 import type { AuthContext } from '../../types/auth-context.js';
 import { getMe } from '../me/me.service.js';
 import type { AuthSession, OtpSent, PendingSignup, SessionContext, Tokens } from './auth.types.js';
 
-const assertSupportedCountry = async (countryCode: string): Promise<void> => {
+const assertSupportedCountry = async (countryCode: string): Promise<bigint> => {
   const country = await prisma.country.findFirst({
     where: { dial_code: countryCode, is_active: true },
     select: { id: true },
@@ -21,6 +22,7 @@ const assertSupportedCountry = async (countryCode: string): Promise<void> => {
       { field: 'countryCode', message: 'This country is not supported yet' },
     ]);
   }
+  return country.id;
 };
 
 const findUserId = async (phone: string) =>
@@ -51,10 +53,12 @@ const assertOtpQuota = async (phone: string): Promise<void> => {
   }
 };
 
-const issueOtp = async (phone: string, purposeId: number, pending?: PendingSignup): Promise<OtpSent> => {
+// `email` is where the OTP is also mailed when OTP_EMAIL_ENABLE is on.
+const issueOtp = async (phone: string, purposeId: number, email: string | null, pending?: PendingSignup): Promise<OtpSent> => {
   const code = generateOtp();
   const { ttlSeconds, resendAfterSeconds } = env.otp;
-  await prisma.otp_request.create({
+  const request = await prisma.otp_request.create({
+    select: { id: true },
     data: {
       phone,
       otp_purpose_id: purposeId,
@@ -63,19 +67,22 @@ const issueOtp = async (phone: string, purposeId: number, pending?: PendingSignu
       ...(pending && { pending_name: pending.name, pending_email: pending.email, terms_version: env.termsVersion }),
     },
   });
-  await sendOtpSms(phone, code);
+  // Delivery runs in the background: the OTP is already stored, the response must not wait on SMTP/SMS vendors,
+  // and a failed channel is only logged (the user can request a resend).
+  const sends = [sendOtpSms(phone, code, Number(request.id))];
+  if (env.otp.emailEnabled && email) sends.push(sendOtpEmail(email, code));
+  sends.forEach((send) => send.catch((err) => console.error(`[otp] delivery failed for request ${request.id}`, err)));
   return { resendAfterSeconds, expiresInSeconds: ttlSeconds };
 };
 
 export const requestLoginOtp = async (countryCode: string, mobile: string): Promise<OtpSent> => {
   await assertSupportedCountry(countryCode);
   const phone = toE164(countryCode, mobile);
-  if ((await findUserId(phone)) === null) {
-    throw new ApiError(404, 'ACCOUNT_NOT_FOUND', 'No account found for this number');
-  }
+  const user = await prisma.app_user.findUnique({ where: { phone }, select: { email: true } });
+  if (!user) throw new ApiError(404, 'ACCOUNT_NOT_FOUND', 'No account found for this number');
   await assertOtpQuota(phone);
 
-  return issueOtp(phone, OTP_PURPOSE.LOGIN);
+  return issueOtp(phone, OTP_PURPOSE.LOGIN, user.email);
 };
 
 // No app_user row is created here; name/email/terms wait in otp_request until the OTP is verified.
@@ -97,7 +104,7 @@ export const signUp = async (
   if (emailTaken) throw new ApiError(409, 'EMAIL_ALREADY_EXISTS', 'Email already registered');
 
   await assertOtpQuota(phone);
-  return issueOtp(phone, OTP_PURPOSE.SIGNUP, { name, email });
+  return issueOtp(phone, OTP_PURPOSE.SIGNUP, email, { name, email });
 };
 
 const safeEqual = (a: string, b: string): boolean => {
@@ -119,7 +126,7 @@ export const verifyOtp = async (
   otp: string,
   ctx: SessionContext,
 ): Promise<AuthSession> => {
-  await assertSupportedCountry(countryCode);
+  const countryId = await assertSupportedCountry(countryCode);
   const phone = toE164(countryCode, mobile);
   const { maxAttempts } = env.otp;
 
@@ -155,14 +162,15 @@ export const verifyOtp = async (
       const isNewUser = request.otp_purpose_id === OTP_PURPOSE.SIGNUP;
       const user = isNewUser
         ? await tx.app_user.create({
-            data: {
-              full_name: request.pending_name ?? '',
-              phone,
-              email: request.pending_email,
-              terms_accepted_at: new Date(),
-              terms_version: request.terms_version,
-            },
-          })
+          data: {
+            full_name: request.pending_name ?? '',
+            phone,
+            country_id: countryId,
+            email: request.pending_email,
+            terms_accepted_at: new Date(),
+            terms_version: request.terms_version,
+          },
+        })
         : await tx.app_user.findUnique({ where: { phone } });
       if (!user) throw new ApiError(404, 'ACCOUNT_NOT_FOUND', 'No account found for this number');
       if (!user.is_active) throw new ApiError(403, 'FORBIDDEN', 'This account is disabled');

@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+const RELATIONS_BY_ROLE = {
+  OWNER: ['FLAT_OWNER', 'CO_OWNER', 'OWNER_FAMILY'],
+  TENANT: ['TENANT', 'TENANT_FAMILY', 'FLATMATE'],
+} as const;
+
 const id = (field: string) => z.string().regex(/^[0-9]{1,18}$/, `Invalid ${field}`);
 
 const date = z
@@ -8,17 +13,26 @@ const date = z
   .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v), 'Enter a valid date');
 
 export const homeRequestSchema = z.object({
-  societyId: id('societyId'),
-  buildingId: id('buildingId'),
   flatId: id('flatId'),
-  role: z.enum(['owner', 'tenant'], { error: 'Choose owner or tenant' }),
-  relation: z.enum(['flat_owner', 'co_owner', 'owner_family', 'tenant', 'tenant_family', 'flatmate'], {
+  role: z.enum(['OWNER', 'TENANT'], { error: 'Choose owner or tenant' }),
+  relation: z.enum(['FLAT_OWNER', 'CO_OWNER', 'OWNER_FAMILY', 'TENANT', 'TENANT_FAMILY', 'FLATMATE'], {
     error: 'Choose your relation to the flat',
   }),
-  occupancy: z.enum(['residing', 'moving_in', 'let_out', 'empty'], { error: 'Choose the flat status' }),
+  occupancy: z.enum(['RESIDING', 'MOVING_IN', 'LET_OUT', 'EMPTY'], { error: 'Choose the flat status' }),
   documentIds: z.array(id('documentId')).min(1, 'Upload at least one document').max(5),
   agreementStart: date.nullish(),
   agreementEnd: date.nullish(),
+}).superRefine((v, ctx) => {
+  const issue = (field: string, message: string) => ctx.addIssue({ code: 'custom', path: [field], message });
+  if (!(RELATIONS_BY_ROLE[v.role] as readonly string[]).includes(v.relation)) {
+    issue('relation', 'This relation does not match owner / tenant');
+  }
+  // Agreement dates are for tenants; an owner's are ignored.
+  if (v.role === 'TENANT') {
+    if (!v.agreementStart) issue('agreementStart', 'Enter the agreement start date');
+    if (!v.agreementEnd) issue('agreementEnd', 'Enter the agreement end date');
+    else if (v.agreementStart && v.agreementEnd <= v.agreementStart) issue('agreementEnd', 'End date must be after the start date');
+  }
 });
 export type HomeRequestInput = z.infer<typeof homeRequestSchema>;
 

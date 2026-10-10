@@ -4,7 +4,7 @@ import type { BuildingDto, CityDto, CountryDto, FlatDto, SocietyDto } from '../m
 export interface HomeDto {
   id: string;
   requestId: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: string; // request_status.code: PENDING, APPROVED, REJECTED
   rejectionReason: string | null;
   role: string;
   relation: string;

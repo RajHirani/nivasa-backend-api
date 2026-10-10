@@ -1,7 +1,7 @@
 import { prisma } from '../../lib/prisma.js';
 import { loadAccess } from '../../lib/access.js';
 import { ApiError } from '../../utils/api-error.js';
-import { buildingDto, cityDto, countryDto, flatDto, lower, societyDto, unitInclude } from '../../lib/dto.js';
+import { buildingDto, cityDto, countryDto, flatDto, societyDto, unitInclude } from '../../lib/dto.js';
 import type {
   EntryDto,
   HomeRequestSummaryDto,
@@ -14,16 +14,6 @@ import type {
 const MEMBER_ACTIVE = 'ACTIVE';
 const REQUEST_PENDING = 'PENDING';
 const REQUEST_REJECTED = 'REJECTED';
-
-// Split an E.164 number into the dial code of a known country and the national number.
-const splitPhone = async (phone: string): Promise<{ countryCode: string; mobile: string }> => {
-  const countries = await prisma.country.findMany({ select: { dial_code: true } });
-  const match = countries
-    .map((c) => c.dial_code)
-    .filter((d) => phone.startsWith(d))
-    .sort((a, b) => b.length - a.length)[0];
-  return match ? { countryCode: match, mobile: phone.slice(match.length) } : { countryCode: '', mobile: phone };
-};
 
 // Active, current memberships (oldest first) with roles, permissions and current approved homes.
 export const listMemberships = async (userId: bigint): Promise<MembershipDto[]> => {
@@ -63,9 +53,9 @@ export const listMemberships = async (userId: bigint): Promise<MembershipDto[]> 
         requestId: r.home_request_id?.toString() ?? null,
         building: buildingDto(r.structure),
         flat: flatDto(r.structure),
-        relation: lower(r.resident_relation.code),
+        relation: r.resident_relation.code,
         relationLabel: r.resident_relation.name,
-        occupancy: lower(r.occupancy_status.code),
+        occupancy: r.occupancy_status.code,
       }));
     const a = access.get(m.society_id) ?? { roles: [], permissions: [] };
     return {
@@ -97,7 +87,7 @@ export const listHomeRequests = async (userId: bigint): Promise<HomeRequestSumma
   });
   return rows.map((r) => ({
     requestId: r.id.toString(),
-    status: lower(r.request_status.code) as 'pending' | 'rejected',
+    status: r.request_status.code,
     rejectionReason: r.rejection_reason,
     society: societyDto(r.society),
     city: cityDto(r.society.city),
@@ -108,23 +98,24 @@ export const listHomeRequests = async (userId: bigint): Promise<HomeRequestSumma
   }));
 };
 
-// Any active membership → home (default: the most recently joined society, and its first approved home).
-// Otherwise a pending/rejected request → requestStatus, otherwise onboarding. Requests never override a membership.
+// Any active membership → HOME (default: the most recently joined society, and its first approved home).
+// Otherwise a pending/rejected request → REQUEST_STATUS, otherwise ONBOARDING. Requests never override a membership.
 export const decideEntry = (memberships: MembershipDto[], requests: HomeRequestSummaryDto[]): EntryDto => {
   const latest = memberships[memberships.length - 1];
   if (latest) {
-    return { route: 'home', societyId: latest.society.id, homeId: latest.homes[0]?.id ?? null, requestId: null };
+    return { route: 'HOME', societyId: latest.society.id, homeId: latest.homes[0]?.id ?? null, requestId: null };
   }
   if (requests[0]) {
-    return { route: 'requestStatus', societyId: null, homeId: null, requestId: requests[0].requestId };
+    return { route: 'REQUEST_STATUS', societyId: null, homeId: null, requestId: requests[0].requestId };
   }
-  return { route: 'onboarding', societyId: null, homeId: null, requestId: null };
+  return { route: 'ONBOARDING', societyId: null, homeId: null, requestId: null };
 };
 
 export const getUser = async (userId: bigint): Promise<UserDto> => {
-  const u = await prisma.app_user.findUnique({ where: { id: userId } });
+  const u = await prisma.app_user.findUnique({ where: { id: userId }, include: { country: { select: { dial_code: true } } } });
   if (!u) throw new ApiError(404, 'ACCOUNT_NOT_FOUND', 'No account found');
-  return { id: u.id.toString(), ...(await splitPhone(u.phone)), name: u.full_name, email: u.email };
+  const countryCode = u.country.dial_code;
+  return { id: u.id.toString(), countryCode, mobile: u.phone.slice(countryCode.length), name: u.full_name, email: u.email };
 };
 
 export const getMe = async (userId: bigint, knownUser?: UserDto): Promise<MeDto> => {

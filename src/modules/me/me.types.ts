@@ -60,7 +60,7 @@ export interface MembershipDto {
 
 export interface HomeRequestSummaryDto {
   requestId: string;
-  status: 'pending' | 'rejected';
+  status: string;
   rejectionReason: string | null;
   society: SocietyDto;
   city: CityDto;
@@ -71,7 +71,7 @@ export interface HomeRequestSummaryDto {
 }
 
 export interface EntryDto {
-  route: 'home' | 'requestStatus' | 'onboarding';
+  route: 'HOME' | 'REQUEST_STATUS' | 'ONBOARDING';
   societyId: string | null;
   homeId: string | null;
   requestId: string | null;

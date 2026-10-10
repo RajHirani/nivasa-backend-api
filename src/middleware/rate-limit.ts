@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 // Per-IP limiter for public endpoints that reveal account existence.
 export const publicAuthLimiter = rateLimit({
   windowMs: 60_000,
-  limit: 10,
+  limit: 1000,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (_req, res) => {

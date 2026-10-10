@@ -2,28 +2,25 @@ import { randomUUID } from 'node:crypto';
 import { fileTypeFromBuffer } from 'file-type';
 import { env } from '../../config/env.js';
 import { prisma } from '../../lib/prisma.js';
+import { CACHE_KEYS, cached } from '../../lib/static-cache.js';
 import { storage } from '../../lib/storage/index.js';
 import { ApiError } from '../../utils/api-error.js';
 import type { UploadDto } from './uploads.types.js';
 
 const MB = 1024 * 1024;
-const DOCUMENT_TYPES = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png' } as const;
-const PHOTO_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png' } as const;
 
-// API purpose → DB upload_purpose code, allowed content types (checked on the bytes) and size limit.
-const PURPOSES = {
-  sales_deed: { code: 'SALES_DEED', types: DOCUMENT_TYPES, maxBytes: 10 * MB },
-  rent_agreement: { code: 'RENT_AGREEMENT', types: DOCUMENT_TYPES, maxBytes: 10 * MB },
-  ticket_photo: { code: 'TICKET_PHOTO', types: PHOTO_TYPES, maxBytes: 5 * MB },
-  ticket_reply_photo: { code: 'TICKET_REPLY_PHOTO', types: PHOTO_TYPES, maxBytes: 5 * MB },
-  ticket_resolution_photo: { code: 'TICKET_RESOLUTION_PHOTO', types: PHOTO_TYPES, maxBytes: 5 * MB },
-} as const;
-export type PurposeName = keyof typeof PURPOSES;
+// Active upload purposes with their rules, cached until an admin clears CACHE_KEYS.UPLOAD_PURPOSES.
+const uploadPurposes = () =>
+  cached(CACHE_KEYS.UPLOAD_PURPOSES, () =>
+    prisma.upload_purpose.findMany({
+      where: { is_active: true },
+      select: { id: true, code: true, allowed_content_types: true, max_mb: true },
+    }),
+  );
 
-// Hard cap for the multipart parser; per-purpose limits are enforced below.
-export const MAX_UPLOAD_BYTES = Math.max(...Object.values(PURPOSES).map((p) => p.maxBytes));
-
-const purposeName = (code: string): string => code.toLowerCase();
+// Largest file any active purpose accepts; the multipart parser stops reading at this size.
+export const maxUploadBytes = async (): Promise<number> =>
+  Math.max(0, ...(await uploadPurposes()).map((p) => p.max_mb)) * MB;
 
 export const toUploadDto = async (u: {
   id: bigint;
@@ -34,7 +31,7 @@ export const toUploadDto = async (u: {
   upload_purpose: { code: string };
 }): Promise<UploadDto> => ({
   id: u.id.toString(),
-  purpose: purposeName(u.upload_purpose.code),
+  purpose: u.upload_purpose.code,
   name: u.file_name,
   size: Number(u.size_bytes),
   contentType: u.content_type,
@@ -46,27 +43,30 @@ export const toUploadDto = async (u: {
 
 export const createUpload = async (
   userId: bigint,
-  purpose: PurposeName,
+  purpose: string,
   file: { originalname: string; buffer: Buffer; size: number },
 ): Promise<UploadDto> => {
-  const rule = PURPOSES[purpose];
+  const rule = (await uploadPurposes()).find((p) => p.code === purpose);
+  if (!rule) {
+    throw new ApiError(400, 'VALIDATION_FAILED', 'Invalid input', [{ field: 'purpose', message: 'Choose what the file is for' }]);
+  }
+  // e.g. "PDF, JPEG or PNG" from application/pdf, image/jpeg, image/png
+  const names = rule.allowed_content_types.map((t) => (t.split('/')[1] ?? t).toUpperCase());
+  const allowed = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : (names[0] ?? '');
   const unsupported = () =>
-    new ApiError(415, 'UNSUPPORTED_FILE_TYPE', 'Not supported · Use PDF, JPG or PNG', [
-      { field: 'file', message: 'Not supported · Use PDF, JPG or PNG' },
+    new ApiError(415, 'UNSUPPORTED_FILE_TYPE', `Not supported · Use ${allowed}`, [
+      { field: 'file', message: `Not supported · Use ${allowed}` },
     ]);
 
   if (file.size === 0) throw new ApiError(400, 'VALIDATION_FAILED', 'Invalid input', [{ field: 'file', message: 'The file is empty' }]);
-  if (file.size > rule.maxBytes) {
-    throw new ApiError(413, 'FILE_TOO_LARGE', `File is too large (max ${rule.maxBytes / MB} MB)`);
+  if (file.size > rule.max_mb * MB) {
+    throw new ApiError(413, 'FILE_TOO_LARGE', `File is too large (max ${rule.max_mb} MB)`);
   }
 
   // Trust the bytes, not the extension or the client's Content-Type.
   const detected = await fileTypeFromBuffer(file.buffer);
-  const extension = detected && (rule.types as Record<string, string>)[detected.mime];
-  if (!detected || !extension) throw unsupported();
-
-  const purposeRow = await prisma.upload_purpose.findUnique({ where: { code: rule.code }, select: { id: true } });
-  if (!purposeRow) throw new ApiError(500, 'INTERNAL_ERROR', 'Something went wrong');
+  if (!detected || !rule.allowed_content_types.includes(detected.mime)) throw unsupported();
+  const extension = detected.ext;
 
   const storageKey = `uploads/${userId}/${randomUUID()}.${extension}`;
   await storage.put(storageKey, file.buffer, { contentType: detected.mime });
@@ -74,7 +74,7 @@ export const createUpload = async (
     const row = await prisma.upload.create({
       data: {
         user_id: userId,
-        upload_purpose_id: purposeRow.id,
+        upload_purpose_id: rule.id,
         file_name: file.originalname.slice(0, 255) || `file.${extension}`,
         content_type: detected.mime,
         size_bytes: BigInt(file.size),

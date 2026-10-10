@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import { buildingDto, flatDto, lower, unitInclude } from '../../lib/dto.js';
+import { buildingDto, flatDto, unitInclude } from '../../lib/dto.js';
+import { idOf, lookups } from '../../lib/lookups.js';
 import { prisma } from '../../lib/prisma.js';
 import { ApiError } from '../../utils/api-error.js';
 import { decodeCursor, encodeCursor } from '../../utils/cursor.js';
@@ -30,13 +31,13 @@ const toDto = async (r: RequestRow): Promise<HomeRequestDto> => {
   const dated = r.home_request_document.map((d) => d.upload).find((u) => u.agreement_start || u.agreement_end);
   return {
     requestId: r.id.toString(),
-    status: lower(r.request_status.code) as HomeRequestDto['status'],
+    status: r.request_status.code,
     rejectionReason: r.rejection_reason,
     applicant: { id: applicant.id.toString(), name: applicant.full_name },
-    role: lower(r.resident_role.code),
-    relation: lower(r.resident_relation.code),
+    role: r.resident_role.code,
+    relation: r.resident_relation.code,
     relationLabel: r.resident_relation.name,
-    occupancy: lower(r.occupancy_status.code),
+    occupancy: r.occupancy_status.code,
     building: buildingDto(r.structure),
     flat: flatDto(r.structure),
     agreementStart: day(dated?.agreement_start ?? null),
@@ -70,7 +71,7 @@ export const listRequests = async (societyId: bigint, status: string, limit: num
   const rows = await prisma.home_request.findMany({
     where: {
       society_id: societyId,
-      request_status: { code: status.toUpperCase() },
+      request_status: { code: status },
       ...(after && afterAt
         ? { OR: [{ created_at: { gt: afterAt } }, { created_at: afterAt, id: { gt: BigInt(after.i) } }] }
         : {}),
@@ -107,16 +108,15 @@ export const approveRequest = async (societyId: bigint, reviewerId: bigint, requ
       if (!request || request.request_status.code === 'CANCELLED') throw new ApiError(404, 'NOT_FOUND', 'Home request not found');
       if (request.request_status.code !== 'PENDING') throw notPending();
 
-      const [approved, activeStatus] = await Promise.all([
-        tx.request_status.findUniqueOrThrow({ where: { code: 'APPROVED' }, select: { id: true } }),
-        tx.member_status.findUniqueOrThrow({ where: { code: 'ACTIVE' }, select: { id: true } }),
-      ]);
+      const ids = await lookups();
+      const approvedId = idOf(ids.requestStatus, 'APPROVED');
+      const activeStatusId = idOf(ids.memberStatus, 'ACTIVE');
 
       // The status guard makes two reviewers (or a cancel at the same moment) decide the request only once.
       const now = new Date();
       const decided = await tx.home_request.updateMany({
         where: { id: requestId, request_status: { code: 'PENDING' } },
-        data: { request_status_id: approved.id, reviewed_by: reviewerId, reviewed_at: now, rejection_reason: null, updated_at: now },
+        data: { request_status_id: approvedId, reviewed_by: reviewerId, reviewed_at: now, rejection_reason: null, updated_at: now },
       });
       if (decided.count === 0) throw notPending();
 
@@ -133,7 +133,7 @@ export const approveRequest = async (societyId: bigint, reviewerId: bigint, requ
       });
       if (!membership) {
         await tx.user_society_map.create({
-          data: { user_id: request.user_id, society_id: societyId, member_status_id: activeStatus.id, added_by: reviewerId },
+          data: { user_id: request.user_id, society_id: societyId, member_status_id: activeStatusId, added_by: reviewerId },
         });
       }
       await tx.user_resident_map.create({
@@ -167,11 +167,11 @@ export const rejectRequest = async (
   const current = await loadRequest(societyId, requestId);
   if (current.request_status.code !== 'PENDING') throw notPending();
 
-  const rejected = await prisma.request_status.findUniqueOrThrow({ where: { code: 'REJECTED' }, select: { id: true } });
+  const rejectedId = idOf((await lookups()).requestStatus, 'REJECTED');
   const now = new Date();
   const decided = await prisma.home_request.updateMany({
     where: { id: requestId, society_id: societyId, request_status: { code: 'PENDING' } },
-    data: { request_status_id: rejected.id, rejection_reason: reason, reviewed_by: reviewerId, reviewed_at: now, updated_at: now },
+    data: { request_status_id: rejectedId, rejection_reason: reason, reviewed_by: reviewerId, reviewed_at: now, updated_at: now },
   });
   if (decided.count === 0) throw notPending();
   return getRequest(societyId, requestId);
