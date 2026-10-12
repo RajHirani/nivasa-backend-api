@@ -16,10 +16,12 @@ export const requireMembership: RequestHandler = async (req, _res, next) => {
   const { userId } = req.auth!;
 
   const membership = await prisma.user_society_map.findFirst({
-    where: { user_id: userId, society_id: societyId, left_at: null, member_status: { code: 'ACTIVE' }, society: { is_active: true } },
-    select: { id: true },
+    where: { user_id: userId, society_id: societyId, left_at: null, member_status: { code: 'ACTIVE' } },
+    select: { society: { select: { is_active: true } } },
   });
   if (!membership) throw new ApiError(403, 'NOT_A_MEMBER', 'You are not a member of this society');
+  // Deactivated by the Nivas platform team: members get a distinct code so the app can show "contact Nivas".
+  if (!membership.society.is_active) throw new ApiError(403, 'SOCIETY_INACTIVE', 'This society is currently inactive. Please contact Nivas');
 
   const hasHome = (await prisma.user_resident_map.count({
     where: { user_id: userId, society_id: societyId, move_out_date: null, is_active: true },

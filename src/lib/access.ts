@@ -12,8 +12,9 @@ export interface SocietyAccess {
 
 
 // Roles and permissions of a user inside each given society (the caller has already established active membership).
-// permissions = platform roles ∪ the society's roles ∪ RESIDENT's permissions when the user has a current home there.
-// A super admin role (PLATFORM_ADMIN) gets every society permission. RESIDENT is derived, never stored in user_society_role.
+// permissions = the society's roles ∪ RESIDENT's permissions when the user has a current home there.
+// Platform roles (Nivas staff, user_platform_role) never count here: staff who live in a society get resident rights only.
+// RESIDENT is derived, never stored in user_society_role.
 export const loadAccess = async (
   userId: bigint,
   societyIds: bigint[],
@@ -22,14 +23,14 @@ export const loadAccess = async (
   const result = new Map<bigint, SocietyAccess>();
   if (societyIds.length === 0) return result;
 
-  const [assignments, residentRole, allPermissions] = await Promise.all([
+  const [assignments, residentRole] = await Promise.all([
     prisma.user_society_role.findMany({
       where: {
         user_id: userId,
         is_active: true,
         end_date: null,
         role: { is_active: true },
-        OR: [{ society_id: null }, { society_id: { in: societyIds } }],
+        society_id: { in: societyIds },
       },
       select: {
         society_id: true,
@@ -39,7 +40,6 @@ export const loadAccess = async (
             code: true,
             name: true,
             sort_order: true,
-            is_super_admin: true,
             role_permission: { select: { permission: { select: { code: true, is_active: true } } } },
           },
         },
@@ -55,11 +55,7 @@ export const loadAccess = async (
         role_permission: { select: { permission: { select: { code: true, is_active: true } } } },
       },
     }),
-    prisma.permission.findMany({ where: { is_active: true }, select: { code: true } }),
   ]);
-
-  const platform = assignments.filter((a) => a.society_id === null).map((a) => a.role);
-  const superAdmin = platform.some((r) => r.is_super_admin);
 
   for (const societyId of societyIds) {
     const roles = new Map<number, { code: string; name: string; sort_order: number }>();
@@ -68,7 +64,6 @@ export const loadAccess = async (
       for (const rp of r.role_permission) if (rp.permission.is_active) permissions.add(rp.permission.code);
     };
 
-    platform.forEach(grant);
     for (const a of assignments) {
       if (a.society_id !== societyId) continue;
       roles.set(a.role.id, a.role);
@@ -78,7 +73,6 @@ export const loadAccess = async (
       roles.set(residentRole.id, residentRole);
       grant(residentRole);
     }
-    if (superAdmin) allPermissions.forEach((p) => permissions.add(p.code));
 
     result.set(societyId, {
       roles: [...roles.values()].sort((a, b) => a.sort_order - b.sort_order).map(({ code, name }) => ({ code, name })),

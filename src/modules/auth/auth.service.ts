@@ -33,11 +33,11 @@ export const mobileExists = async (countryCode: string, mobile: string): Promise
   return (await findUserId(toE164(countryCode, mobile))) !== null;
 };
 
-// Resend limits come from otp_request rows: 1 per 30 s, 5 per hour per number.
-const assertOtpQuota = async (phone: string): Promise<void> => {
+// Resend limits come from otp_request rows: 1 per 30 s, 5 per hour per number (or per email for the platform console).
+export const assertOtpQuota = async (who: { phone: string } | { email: string }): Promise<void> => {
   const { resendAfterSeconds, maxPerHour } = env.otp;
   const recent = await prisma.otp_request.findMany({
-    where: { phone, created_at: { gt: new Date(Date.now() - 3_600_000) } },
+    where: { ...who, created_at: { gt: new Date(Date.now() - 3_600_000) } },
     orderBy: { created_at: 'desc' },
     select: { created_at: true },
   });
@@ -80,7 +80,7 @@ export const requestLoginOtp = async (countryCode: string, mobile: string): Prom
   const phone = toE164(countryCode, mobile);
   const user = await prisma.app_user.findUnique({ where: { phone }, select: { email: true } });
   if (!user) throw new ApiError(404, 'ACCOUNT_NOT_FOUND', 'No account found for this number');
-  await assertOtpQuota(phone);
+  await assertOtpQuota({ phone });
 
   return issueOtp(phone, OTP_PURPOSE.LOGIN, user.email);
 };
@@ -103,7 +103,7 @@ export const signUp = async (
   });
   if (emailTaken) throw new ApiError(409, 'EMAIL_ALREADY_EXISTS', 'Email already registered');
 
-  await assertOtpQuota(phone);
+  await assertOtpQuota({ phone });
   return issueOtp(phone, OTP_PURPOSE.SIGNUP, email, { name, email });
 };
 
@@ -202,7 +202,14 @@ export const verifyOtp = async (
   }
 };
 
-export const refreshTokens = async (refreshToken: string): Promise<Tokens> => {
+interface Rotated {
+  accessToken: string;
+  expiresIn: number;
+  /** null when the token had just been rotated by a parallel request: the caller already has the newer one. */
+  refreshToken: string | null;
+}
+
+const rotate = async (refreshToken: string, graceSeconds: number): Promise<Rotated> => {
   const stored = await prisma.refresh_token.findUnique({
     where: { token_hash: hashToken(refreshToken) },
     include: { auth_session: { include: { app_user: { select: { is_active: true } } } } },
@@ -216,8 +223,16 @@ export const refreshTokens = async (refreshToken: string): Promise<Tokens> => {
     prisma.auth_session.update({ where: { id: session.id }, data: { revoked_at: new Date() } });
   const reused = new ApiError(401, 'REFRESH_TOKEN_REUSED', 'Session ended, please sign in again');
 
-  // A rotated token showing up again means it leaked: kill the whole session.
+  // Answer for a parallel refresh that lost the race: a fresh access token, but no second rotation.
+  const lostRace = (): Rotated => ({
+    accessToken: signAccessToken(session.user_id, session.id),
+    expiresIn: env.jwt.accessTtlSeconds,
+    refreshToken: null,
+  });
+
+  // A rotated token showing up again means it leaked: kill the whole session (unless it is the parallel-tab case).
   if (stored.used_at) {
+    if (graceSeconds > 0 && Date.now() - stored.used_at.getTime() < graceSeconds * 1000) return lostRace();
     await revokeSession();
     throw reused;
   }
@@ -239,6 +254,7 @@ export const refreshTokens = async (refreshToken: string): Promise<Tokens> => {
     return true;
   });
   if (!rotated) {
+    if (graceSeconds > 0) return lostRace();
     await revokeSession();
     throw reused;
   }
@@ -248,6 +264,23 @@ export const refreshTokens = async (refreshToken: string): Promise<Tokens> => {
     refreshToken: next.token,
     expiresIn: env.jwt.accessTtlSeconds,
   };
+};
+
+// Mobile app: strict single use, the new refresh token is returned in the body.
+export const refreshTokens = async (refreshToken: string): Promise<Tokens> => {
+  const rotated = await rotate(refreshToken, 0);
+  if (!rotated.refreshToken) throw new ApiError(500, 'INTERNAL_ERROR', 'Something went wrong');
+  return { accessToken: rotated.accessToken, refreshToken: rotated.refreshToken, expiresIn: rotated.expiresIn };
+};
+
+// Platform console: the refresh token travels in a cookie, so a just-rotated one is tolerated for a few seconds.
+export const refreshWithGrace = (refreshToken: string): Promise<Rotated> => rotate(refreshToken, env.jwt.refreshReuseGraceSeconds);
+
+// Ends the session a refresh token belongs to (no access token needed, so an expired one can still sign out).
+export const endSessionByRefreshToken = async (refreshToken: string): Promise<void> => {
+  const stored = await prisma.refresh_token.findUnique({ where: { token_hash: hashToken(refreshToken) }, select: { auth_session_id: true } });
+  if (!stored) return;
+  await prisma.auth_session.updateMany({ where: { id: stored.auth_session_id, revoked_at: null }, data: { revoked_at: new Date() } });
 };
 
 // Ends the caller's session, plus the session behind the given refresh token if it is also theirs.

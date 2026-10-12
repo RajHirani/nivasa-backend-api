@@ -8,6 +8,8 @@ import { meRouter } from '../modules/me/me.routes.js';
 import { directoryRouter } from '../modules/directory/directory.routes.js';
 import { dailyHelpRouter } from '../modules/service-providers/service-providers.routes.js';
 import { adminRouter } from '../modules/admin/admin.routes.js';
+import { platformRouter } from '../modules/platform-auth/platform-auth.routes.js';
+import { platformStaffRouter } from '../modules/platform-staff/platform-staff.routes.js';
 import { homeRequestsRouter } from '../modules/home-requests/home-requests.routes.js';
 
 export const apiRouter = Router();
@@ -23,3 +25,5 @@ apiRouter.use('/home-requests', homeRequestsRouter);
 apiRouter.use('/directory', directoryRouter);
 apiRouter.use('/daily-help', dailyHelpRouter);
 apiRouter.use('/admin', adminRouter);
+apiRouter.use('/platform', platformRouter);
+apiRouter.use('/platform', platformStaffRouter);
