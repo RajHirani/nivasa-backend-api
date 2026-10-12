@@ -10,6 +10,9 @@ import { dailyHelpRouter } from '../modules/service-providers/service-providers.
 import { adminRouter } from '../modules/admin/admin.routes.js';
 import { platformRouter } from '../modules/platform-auth/platform-auth.routes.js';
 import { platformStaffRouter } from '../modules/platform-staff/platform-staff.routes.js';
+import { platformSocietiesRouter } from '../modules/platform-societies/platform-societies.routes.js';
+import { societyWizardRouter } from '../modules/platform-society-wizard/society-wizard.routes.js';
+import { platformLocationsRouter } from '../modules/platform-locations/platform-locations.routes.js';
 import { homeRequestsRouter } from '../modules/home-requests/home-requests.routes.js';
 
 export const apiRouter = Router();
@@ -27,3 +30,6 @@ apiRouter.use('/daily-help', dailyHelpRouter);
 apiRouter.use('/admin', adminRouter);
 apiRouter.use('/platform', platformRouter);
 apiRouter.use('/platform', platformStaffRouter);
+apiRouter.use('/platform', platformSocietiesRouter);
+apiRouter.use('/platform', societyWizardRouter);
+apiRouter.use('/platform', platformLocationsRouter);
