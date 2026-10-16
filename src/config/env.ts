@@ -11,6 +11,16 @@ const list = (key: string, fallback: string): string[] =>
 
 const consoleUrl = process.env.PLATFORM_CONSOLE_URL ?? 'http://localhost:5173/platform/login';
 const nodeEnv = process.env.NODE_ENV ?? 'development';
+
+// Every kind of email the API sends (see lib/email). One switch, EMAIL_SEND_ENABLED, turns all of them on or off. Not set = ON in
+// production and OFF everywhere else, so a local or test run never emails anybody unless that is switched on on purpose.
+export const EMAIL_KINDS = ['MOBILE_OTP', 'PLATFORM_OTP', 'STAFF_INVITE', 'SOCIETY_ADMIN_INVITE'] as const;
+export type EmailKind = (typeof EMAIL_KINDS)[number];
+const emailSendEnabled = (): boolean => {
+  const value = process.env.EMAIL_SEND_ENABLED?.trim().toLowerCase();
+  return value ? value === 'true' : nodeEnv === 'production';
+};
+
 const origin = (url: string) => url.trim().replace(/\/+$/, '');
 
 export const env = {
@@ -45,6 +55,7 @@ export const env = {
   },
   email: {
     driver: process.env.EMAIL_DRIVER ?? 'gmail',
+    sendEnabled: emailSendEnabled(),
     gmail: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS },
   },
   directory: {
@@ -59,8 +70,6 @@ export const env = {
   otp: {
     hashSecret: required('OTP_HASH_SECRET'),
     devFixedCode: process.env.OTP_DEV_FIXED_CODE || undefined,
-    // Also email the OTP (in addition to the SMS).
-    emailEnabled: process.env.OTP_EMAIL_ENABLE === 'true',
     length: 6,
     ttlSeconds: 300,
     resendAfterSeconds: 30,

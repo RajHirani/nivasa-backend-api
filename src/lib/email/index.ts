@@ -1,7 +1,11 @@
-import { env } from '../../config/env.js';
+import { env, type EmailKind } from '../../config/env.js';
 import { ConsoleEmail } from './console.js';
 import { GmailEmail } from './gmail.js';
+import { renderEmail, type EmailData } from './templates.js';
 import type { EmailProvider } from './types.js';
+
+// EVERY email of the API goes out through sendEmail below, and nowhere else: one place to switch emails off, to log them and to
+// change the provider. One switch, EMAIL_SEND_ENABLED, turns every email on or off (off by default outside production, see config/env.ts).
 
 // Add a provider: implement EmailProvider in its own file and add one case here (plus its env settings).
 const create = (): EmailProvider => {
@@ -15,28 +19,21 @@ const create = (): EmailProvider => {
   }
 };
 
-// Created on first use, so a missing email setup does not stop the API while OTP email is switched off.
+// Created on first use, so a missing email setup does not stop the API while its emails are switched off.
 let provider: EmailProvider | undefined;
-export const email = (): EmailProvider => (provider ??= create());
+
+/**
+ * Sends one email of the given kind. Resolves `{ sent: false }` (and logs why) when email sending is switched off (EMAIL_SEND_ENABLED), `{ sent: true }` after the
+ * provider took the message, and rejects when the provider failed. Callers decide whether to wait for it or only log a failure.
+ */
+export const sendEmail = async <K extends EmailKind>(kind: K, to: string, data: EmailData[K]): Promise<{ sent: boolean }> => {
+  if (!env.email.sendEnabled) {
+    console.info(`[email] ${kind} to ${to} was not sent: email sending is switched off (set EMAIL_SEND_ENABLED=true to send)`);
+    return { sent: false };
+  }
+  await (provider ??= create()).send({ to, ...renderEmail(kind, data) });
+  return { sent: true };
+};
+
+export type { EmailKind } from '../../config/env.js';
 export type { EmailProvider } from './types.js';
-
-export const sendPlatformOtpEmail = (to: string, code: string): Promise<void> =>
-  email().send({
-    to,
-    subject: 'Your Nivaas platform console sign in code',
-    text: `${code} is your Nivaas platform console sign in code. It expires in ${Math.round(env.otp.ttlSeconds / 60)} minutes. Do not share it with anyone.`,
-  });
-
-export const sendStaffInviteEmail = (to: string, name: string, roleName: string): Promise<void> =>
-  email().send({
-    to,
-    subject: 'You have been invited to the Nivaas Platform Console',
-    text: `Hi ${name},\n\nYou have been added to the Nivaas Platform Console as ${roleName}.\n\nSign in at ${env.platform.consoleUrl} with this email address. We will email you a one-time code each time you sign in.\n`,
-  });
-
-export const sendOtpEmail = (to: string, code: string): Promise<void> =>
-  email().send({
-    to,
-    subject: 'Your Nivaas verification code',
-    text: `${code} is your Nivaas verification code. It expires in ${Math.round(env.otp.ttlSeconds / 60)} minutes. Do not share it with anyone.`,
-  });

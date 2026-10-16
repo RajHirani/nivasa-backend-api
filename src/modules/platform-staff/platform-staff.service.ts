@@ -3,7 +3,7 @@ import { prisma } from '../../lib/prisma.js';
 import { ApiError } from '../../utils/api-error.js';
 import { DEVICE_PLATFORM } from '../../utils/otp.js';
 import { toE164 } from '../../utils/phone.js';
-import { sendStaffInviteEmail } from '../../lib/email/index.js';
+import { sendEmail } from '../../lib/email/index.js';
 import type { StaffMemberDto, StaffPageDto, StaffRoleCode, StaffRoleDto, StaffStatus } from './platform-staff.types.js';
 
 // Relation names Prisma generated for the several foreign keys from user_platform_role to app_user.
@@ -201,7 +201,7 @@ export const inviteStaff = async (actorId: bigint, input: InviteInput): Promise<
 
   const member = await findStaffMember(userId);
   // Delivery runs in the background; a failed email is only logged and the invite can be resent.
-  sendStaffInviteEmail(member.email, member.name, role.name).catch((err) => console.error(`[staff] invite email failed for user ${userId}`, err));
+  sendEmail('STAFF_INVITE', member.email, { name: member.name, roleName: role.name }).catch((err) => console.error(`[staff] invite email failed for user ${userId}`, err));
   return member;
 };
 
@@ -270,5 +270,5 @@ export const resendInvite = async (staffId: string): Promise<void> => {
   const wait = Math.ceil(((lastInviteSent.get(member.id) ?? 0) + RESEND_INVITE_AFTER_MS - Date.now()) / 1000);
   if (wait > 0) throw new ApiError(429, 'RATE_LIMITED', `Please wait ${wait}s before resending the invite`, undefined, wait);
   lastInviteSent.set(member.id, Date.now());
-  sendStaffInviteEmail(member.email, member.name, member.role.name).catch((err) => console.error(`[staff] invite email failed for user ${userId}`, err));
+  sendEmail('STAFF_INVITE', member.email, { name: member.name, roleName: member.role.name }).catch((err) => console.error(`[staff] invite email failed for user ${userId}`, err));
 };

@@ -3,7 +3,7 @@ import { prisma } from '../../lib/prisma.js';
 import { env } from '../../config/env.js';
 import { ApiError } from '../../utils/api-error.js';
 import { DEVICE_PLATFORM, generateOtp, hashOtp, OTP_PURPOSE } from '../../utils/otp.js';
-import { sendPlatformOtpEmail } from '../../lib/email/index.js';
+import { sendEmail } from '../../lib/email/index.js';
 import { loadPlatformAccess } from '../../lib/platform-access.js';
 import { newRefreshToken, signAccessToken } from '../../lib/tokens.js';
 import { getUser } from '../me/me.service.js';
@@ -77,7 +77,7 @@ export const requestOtp = async (email: string): Promise<OtpSent> => {
     },
   });
   // Delivery runs in the background; a failed send is only logged (the user can request a resend).
-  sendPlatformOtpEmail(email, code).catch((err) => console.error(`[otp] email delivery failed for request ${request.id}`, err));
+  sendEmail('PLATFORM_OTP', email, { code }).catch((err) => console.error(`[otp] email delivery failed for request ${request.id}`, err));
   return sent;
 };
 

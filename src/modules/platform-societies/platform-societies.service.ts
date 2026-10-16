@@ -1,7 +1,11 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
+import { env } from '../../config/env.js';
+import { ApiError } from '../../utils/api-error.js';
+import { storage } from '../../lib/storage/index.js';
+import { listAdmins } from './society-detail.service.js';
 import type { ListSocietiesParams } from './platform-societies.schema.js';
-import type { DashboardDto, SocietyPageDto, SocietySummaryDto, SocietyType } from './platform-societies.types.js';
+import type { DashboardDto, SocietyDetailDto, SocietyPageDto, SocietySummaryDto, SocietyType } from './platform-societies.types.js';
 
 // The list joins societies with their city and state, their first admin and their number of flats/houses, then filters,
 // sorts and pages in the database, so it stays quick with thousands of societies. Plain SQL is clearer than Prisma here.
@@ -110,5 +114,71 @@ export const getDashboard = async (): Promise<DashboardDto> => {
     inactiveSocieties: total - active,
     unitsManaged: Number(units[0]?.units ?? 0),
     recentSocieties: recent.items,
+  };
+};
+
+// ---------------------------------------------------------------- one society
+
+// Everything the overview shows. The first admin is the longest-serving current President (same rule as the list).
+export const getSocietyDetail = async (societyId: bigint): Promise<SocietyDetailDto> => {
+  const s = await prisma.society.findUnique({
+    where: { id: societyId },
+    select: {
+      id: true, name: true, is_active: true, registration_number: true, phone: true, email: true, address: true, pincode: true,
+      latitude: true, longitude: true, created_at: true,
+      society_type: { select: { code: true } },
+      city: { select: { id: true, name: true, state: { select: { id: true, name: true } }, country: { select: { name: true } } } },
+      upload: { select: { storage_key: true, file_name: true } },
+    },
+  });
+  if (!s) throw new ApiError(404, 'NOT_FOUND', 'Society not found');
+
+  const [counts, admins, reason] = await Promise.all([
+    prisma.$queryRaw<{ buildings: bigint; units: bigint; occupied: bigint }[]>`
+      SELECT
+        count(*) FILTER (WHERE t.is_building) AS buildings,
+        count(*) FILTER (WHERE t.is_unit) AS units,
+        count(*) FILTER (WHERE t.is_unit AND EXISTS (
+          SELECT 1 FROM user_resident_map m WHERE m.unit_id = x.id AND m.move_out_date IS NULL AND m.is_active)) AS occupied
+      FROM structure x JOIN structure_type t ON t.id = x.structure_type_id
+      WHERE x.society_id = ${societyId} AND x.is_active`,
+    listAdmins(societyId),
+    s.is_active
+      ? null
+      : prisma.society_activity.findFirst({
+          where: { society_id: societyId, society_activity_type: { code: 'DEACTIVATED' } },
+          orderBy: { id: 'desc' },
+          select: { note: true },
+        }),
+  ]);
+  const admin = admins[0];
+  const lat = s.latitude === null ? null : Number(s.latitude);
+  const lng = s.longitude === null ? null : Number(s.longitude);
+
+  return {
+    id: s.id.toString(),
+    name: s.name,
+    type: s.society_type.code as SocietyType,
+    status: s.is_active ? 'ACTIVE' : 'INACTIVE',
+    registrationNumber: s.registration_number,
+    phone: s.phone,
+    email: s.email,
+    logoUrl: s.upload
+      ? await storage.downloadUrl(s.upload.storage_key, { expiresInSeconds: env.storage.downloadUrlTtlSeconds, fileName: s.upload.file_name })
+      : null,
+    address: s.address ?? '',
+    city: { id: s.city.id.toString(), name: s.city.name },
+    state: { id: s.city.state.id.toString(), name: s.city.state.name },
+    country: s.city.country.name,
+    pincode: s.pincode ?? '',
+    latitude: lat,
+    longitude: lng,
+    mapUrl: lat !== null && lng !== null ? `https://www.google.com/maps?q=${lat},${lng}` : null,
+    buildingCount: Number(counts[0]?.buildings ?? 0),
+    unitCount: Number(counts[0]?.units ?? 0),
+    occupiedUnitCount: Number(counts[0]?.occupied ?? 0),
+    ...(admin && { firstAdmin: admin }),
+    inactiveReason: reason?.note ?? null,
+    createdAt: s.created_at.toISOString(),
   };
 };

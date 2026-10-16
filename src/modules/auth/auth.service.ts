@@ -4,7 +4,7 @@ import { prisma } from '../../lib/prisma.js';
 import { ApiError } from '../../utils/api-error.js';
 import { toE164 } from '../../utils/phone.js';
 import { env } from '../../config/env.js';
-import { sendOtpEmail } from '../../lib/email/index.js';
+import { sendEmail } from '../../lib/email/index.js';
 import { sendOtpSms } from '../../lib/sms/index.js';
 import { generateOtp, hashOtp, OTP_PURPOSE } from '../../utils/otp.js';
 import { hashToken, newRefreshToken, signAccessToken } from '../../lib/tokens.js';
@@ -53,7 +53,7 @@ export const assertOtpQuota = async (who: { phone: string } | { email: string })
   }
 };
 
-// `email` is where the OTP is also mailed when OTP_EMAIL_ENABLE is on.
+// `email` is where the OTP is also mailed when email sending is switched on (EMAIL_SEND_ENABLED).
 const issueOtp = async (phone: string, purposeId: number, email: string | null, pending?: PendingSignup): Promise<OtpSent> => {
   const code = generateOtp();
   const { ttlSeconds, resendAfterSeconds } = env.otp;
@@ -69,8 +69,8 @@ const issueOtp = async (phone: string, purposeId: number, email: string | null, 
   });
   // Delivery runs in the background: the OTP is already stored, the response must not wait on SMTP/SMS vendors,
   // and a failed channel is only logged (the user can request a resend).
-  const sends = [sendOtpSms(phone, code, Number(request.id))];
-  if (env.otp.emailEnabled && email) sends.push(sendOtpEmail(email, code));
+  const sends: Promise<unknown>[] = [sendOtpSms(phone, code, Number(request.id))];
+  if (email) sends.push(sendEmail('MOBILE_OTP', email, { code }));
   sends.forEach((send) => send.catch((err) => console.error(`[otp] delivery failed for request ${request.id}`, err)));
   return { resendAfterSeconds, expiresInSeconds: ttlSeconds };
 };
