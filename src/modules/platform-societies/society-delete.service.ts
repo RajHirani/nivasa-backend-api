@@ -44,6 +44,7 @@ export const deleteSociety = async (societyId: bigint, actorId: bigint, confirmN
       await tx.$executeRaw`DELETE FROM structure WHERE society_id = ${societyId}`;
       // Roles of the society: assignments and memberships first, then its own roles with their permissions.
       await tx.$executeRaw`DELETE FROM user_society_role WHERE society_id = ${societyId}`;
+      await tx.$executeRaw`DELETE FROM committee_term WHERE society_id = ${societyId}`;
       await tx.$executeRaw`DELETE FROM user_society_map WHERE society_id = ${societyId}`;
       await tx.$executeRaw`DELETE FROM role_permission WHERE role_id IN (SELECT id FROM role WHERE society_id = ${societyId})`;
       await tx.$executeRaw`DELETE FROM role WHERE society_id = ${societyId}`;

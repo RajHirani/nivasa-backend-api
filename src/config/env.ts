@@ -62,7 +62,7 @@ export const env = {
     // Occupancy statuses whose residents appear in the Resident Directory (a "Moving in" status can be added here later).
     occupancyCodes: list('DIRECTORY_OCCUPANCY_CODES', 'RESIDING'),
     // Society roles listed on the Society Committee tab.
-    committeeRoleCodes: list('DIRECTORY_COMMITTEE_ROLES', 'PRESIDENT,SECRETARY,TREASURER,COMMITTEE'),
+    committeeRoleCodes: list('DIRECTORY_COMMITTEE_ROLES', 'PRESIDENT,VICE_CHAIRMAN,SECRETARY,JOINT_SECRETARY,TREASURER,COMMITTEE'),
     // Holders of these roles are listed as guards, next to the GUARD contacts.
     guardRoleCodes: list('DIRECTORY_GUARD_ROLES', 'SECURITY'),
   },

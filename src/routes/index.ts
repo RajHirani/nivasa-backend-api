@@ -14,6 +14,8 @@ import { platformStaffRouter } from '../modules/platform-staff/platform-staff.ro
 import { platformSocietiesRouter } from '../modules/platform-societies/platform-societies.routes.js';
 import { societyWizardRouter } from '../modules/platform-society-wizard/society-wizard.routes.js';
 import { platformLocationsRouter } from '../modules/platform-locations/platform-locations.routes.js';
+import { committeeRouter } from '../modules/committee/committee.routes.js';
+import { rolesRouter } from '../modules/roles/roles.routes.js';
 import { homeRequestsRouter } from '../modules/home-requests/home-requests.routes.js';
 
 export const apiRouter = Router();
@@ -26,6 +28,8 @@ apiRouter.use('/files', filesRouter);
 apiRouter.use(locationsRouter);
 apiRouter.use('/homes', homesRouter);
 apiRouter.use('/home-requests', homeRequestsRouter);
+apiRouter.use('/committee', committeeRouter);
+apiRouter.use('/roles', rolesRouter);
 apiRouter.use('/directory', directoryRouter);
 apiRouter.use('/daily-help', dailyHelpRouter);
 apiRouter.use('/admin', adminRouter);

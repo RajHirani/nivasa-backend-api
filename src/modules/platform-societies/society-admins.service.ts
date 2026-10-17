@@ -4,6 +4,7 @@ import { ApiError } from '../../utils/api-error.js';
 import { toE164 } from '../../utils/phone.js';
 import { raceError, societySetup } from '../platform-society-wizard/society-create.service.js';
 import type { AdminEditInput, AdminInput } from '../platform-society-wizard/society-wizard.schema.js';
+import { ensureCurrentTerm } from '../../lib/committee-term.js';
 import { listAdmins } from './society-detail.service.js';
 import type { SocietyAdminDto } from './platform-societies.types.js';
 
@@ -84,7 +85,8 @@ export const addAdmin = async (societyId: bigint, actorId: bigint, input: AdminI
       if (!(await tx.user_society_map.findFirst({ where: { user_id: adminId, society_id: societyId, left_at: null }, select: { id: true } }))) {
         await tx.user_society_map.create({ data: { user_id: adminId, society_id: societyId, member_status_id: ref.activeMemberStatusId, added_by: actorId } });
       }
-      await tx.user_society_role.create({ data: { user_id: adminId, role_id: ref.presidentRoleId, society_id: societyId, granted_by: actorId } });
+      const term = await ensureCurrentTerm(tx, societyId, actorId);
+      await tx.user_society_role.create({ data: { user_id: adminId, role_id: ref.presidentRoleId, society_id: societyId, term_id: term.id, granted_by: actorId } });
       await tx.society_activity.create({
         data: { society_id: societyId, activity_type_id: await activityTypeId(tx, 'ADMIN_CHANGED'), actor_id: actorId, summary: `Admin added: ${input.name}`, note: `Mobile: ${phone}` },
       });

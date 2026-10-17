@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { ensureCurrentTerm } from '../../lib/committee-term.js';
 import { prisma } from '../../lib/prisma.js';
 import { CACHE_KEYS, cached } from '../../lib/static-cache.js';
 import { ApiError } from '../../utils/api-error.js';
@@ -116,7 +117,8 @@ export const createSociety = async (actorId: bigint, input: SocietyCreateInput):
             adminId = (await tx.app_user.create({ data: { full_name: admin.name, phone, country_id: BigInt(admin.countryId), email: admin.email }, select: { id: true } })).id;
           }
           await tx.user_society_map.create({ data: { user_id: adminId, society_id: societyId, member_status_id: ref.activeMemberStatusId, added_by: actorId } });
-          await tx.user_society_role.create({ data: { user_id: adminId, role_id: ref.presidentRoleId, society_id: societyId, granted_by: actorId } });
+          const term = await ensureCurrentTerm(tx, societyId, actorId);
+          await tx.user_society_role.create({ data: { user_id: adminId, role_id: ref.presidentRoleId, society_id: societyId, term_id: term.id, granted_by: actorId } });
         }
 
         const noun = apartment ? 'flat' : 'house';

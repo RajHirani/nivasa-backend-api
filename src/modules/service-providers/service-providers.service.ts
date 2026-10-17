@@ -223,8 +223,11 @@ export const createProvider = async (
   let created = false;
   if (!existing) {
     try {
+      // country_id is the country whose dial code prefixes the phone (like app_user).
+      const country = await prisma.country.findFirst({ where: { dial_code: input.countryCode, is_active: true }, select: { id: true } });
+      if (!country) throw invalid('countryCode', 'This country is not supported yet');
       existing = await prisma.service_provider.create({
-        data: { society_id: caller.societyId, service_type_id: type.id, name: input.name, phone, created_by: caller.userId },
+        data: { society_id: caller.societyId, service_type_id: type.id, country_id: country.id, name: input.name, phone, created_by: caller.userId },
         select: { id: true },
       });
       created = true;

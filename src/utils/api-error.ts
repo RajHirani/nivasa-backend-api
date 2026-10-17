@@ -32,6 +32,11 @@ export type ErrorCode =
   | 'FILE_TOO_LARGE'
   | 'UNSUPPORTED_FILE_TYPE'
   | 'UPLOAD_IN_USE'
+  | 'LAST_PRESIDENT'
+  | 'ALREADY_ON_COMMITTEE'
+  | 'PHONE_BELONGS_TO_RESIDENT'
+  | 'TERM_NAME_TAKEN'
+  | 'TERM_NOT_CURRENT'
   | 'INTERNAL_ERROR';
 
 export interface ErrorDetail {

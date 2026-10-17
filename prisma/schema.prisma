@@ -21,6 +21,8 @@ model app_user {
   updated_at                                                 DateTime                     @default(now()) @db.Timestamptz(6)
   country                                                    country                      @relation(fields: [country_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   auth_session                                               auth_session[]
+  committee_term_committee_term_closed_byToapp_user          committee_term[]             @relation("committee_term_closed_byToapp_user")
+  committee_term_committee_term_created_byToapp_user         committee_term[]             @relation("committee_term_created_byToapp_user")
   home_request_home_request_reviewed_byToapp_user            home_request[]               @relation("home_request_reviewed_byToapp_user")
   home_request_home_request_user_idToapp_user                home_request[]               @relation("home_request_user_idToapp_user")
   role                                                       role[]
@@ -78,14 +80,16 @@ model city {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model country {
-  id        BigInt     @id @default(autoincrement())
-  name      String
-  iso_code  String     @unique @db.Char(2)
-  dial_code String     @db.VarChar(8)
-  is_active Boolean    @default(false)
-  app_user  app_user[]
-  city      city[]
-  state     state[]
+  id               BigInt             @id @default(autoincrement())
+  name             String
+  iso_code         String             @unique @db.Char(2)
+  dial_code        String             @db.VarChar(8)
+  is_active        Boolean            @default(false)
+  app_user         app_user[]
+  city             city[]
+  service_provider service_provider[]
+  society_contact  society_contact[]
+  state            state[]
 }
 
 /// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
@@ -345,6 +349,7 @@ model society {
   created_at          DateTime            @default(now()) @db.Timestamptz(6)
   updated_at          DateTime            @default(now()) @db.Timestamptz(6)
   logo_upload_id      BigInt?
+  committee_term      committee_term[]
   home_request        home_request[]
   role                role[]
   service_provider    service_provider[]
@@ -521,6 +526,8 @@ model service_provider {
   created_by                 BigInt?
   created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
   updated_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  country_id                 BigInt
+  country                    country                      @relation(fields: [country_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   app_user                   app_user?                    @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
   service_type               service_type                 @relation(fields: [service_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   society                    society                      @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -590,29 +597,33 @@ model society_contact {
   created_by          BigInt?
   created_at          DateTime         @default(now()) @db.Timestamptz(6)
   updated_at          DateTime         @default(now()) @db.Timestamptz(6)
+  country_id          BigInt
   contact_category    contact_category @relation(fields: [contact_category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  country             country          @relation(fields: [country_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   app_user            app_user?        @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
   society             society          @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model user_society_role {
-  id                                              BigInt    @id @default(autoincrement())
+  id                                              BigInt          @id @default(autoincrement())
   user_id                                         BigInt
   role_id                                         Int
   society_id                                      BigInt
-  start_date                                      DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
-  end_date                                        DateTime? @db.Date
-  is_active                                       Boolean   @default(true)
+  start_date                                      DateTime        @default(dbgenerated("CURRENT_DATE")) @db.Date
+  end_date                                        DateTime?       @db.Date
+  is_active                                       Boolean         @default(true)
   granted_by                                      BigInt?
   ended_by                                        BigInt?
-  created_at                                      DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at                                      DateTime  @default(now()) @db.Timestamptz(6)
-  app_user_user_society_role_ended_byToapp_user   app_user? @relation("user_society_role_ended_byToapp_user", fields: [ended_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_ended_by_fkey")
-  app_user_user_society_role_granted_byToapp_user app_user? @relation("user_society_role_granted_byToapp_user", fields: [granted_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_granted_by_fkey")
-  role                                            role      @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_role_id_fkey")
-  society                                         society   @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_society_id_fkey")
-  app_user_user_society_role_user_idToapp_user    app_user  @relation("user_society_role_user_idToapp_user", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_user_id_fkey")
+  created_at                                      DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at                                      DateTime        @default(now()) @db.Timestamptz(6)
+  term_id                                         BigInt?
+  app_user_user_society_role_ended_byToapp_user   app_user?       @relation("user_society_role_ended_byToapp_user", fields: [ended_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_ended_by_fkey")
+  app_user_user_society_role_granted_byToapp_user app_user?       @relation("user_society_role_granted_byToapp_user", fields: [granted_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_granted_by_fkey")
+  role                                            role            @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_role_id_fkey")
+  society                                         society         @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_society_id_fkey")
+  committee_term                                  committee_term? @relation(fields: [term_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_user_society_role_user_idToapp_user    app_user        @relation("user_society_role_user_idToapp_user", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_user_id_fkey")
 
   @@index([society_id, role_id], map: "idx_user_society_role_society_role")
   @@index([user_id], map: "idx_user_society_role_user")
@@ -701,4 +712,25 @@ model user_platform_role {
   app_user_user_platform_role_user_idToapp_user    app_user  @relation("user_platform_role_user_idToapp_user", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([role_id], map: "idx_user_platform_role_role")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model committee_term {
+  id                                           BigInt              @id @default(autoincrement())
+  society_id                                   BigInt
+  name                                         String
+  start_date                                   DateTime            @db.Date
+  end_date                                     DateTime?           @db.Date
+  closed_at                                    DateTime?           @db.Timestamptz(6)
+  closed_by                                    BigInt?
+  created_by                                   BigInt?
+  created_at                                   DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at                                   DateTime            @default(now()) @db.Timestamptz(6)
+  app_user_committee_term_closed_byToapp_user  app_user?           @relation("committee_term_closed_byToapp_user", fields: [closed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_committee_term_created_byToapp_user app_user?           @relation("committee_term_created_byToapp_user", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society                                      society             @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user_society_role                            user_society_role[]
+
+  @@index([society_id, start_date(sort: Desc)], map: "idx_committee_term_society_start")
 }
