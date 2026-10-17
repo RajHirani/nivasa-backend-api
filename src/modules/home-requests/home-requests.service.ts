@@ -11,7 +11,7 @@ const requestInclude = {
   request_status: { select: { code: true } },
   resident_role: { select: { code: true } },
   resident_relation: { select: { code: true, name: true } },
-  occupancy_status: { select: { code: true } },
+  occupancy_status: { select: { code: true, name: true } },
   app_user_home_request_user_idToapp_user: {
     select: { id: true, full_name: true, phone: true, email: true, country: { select: { dial_code: true } } },
   },
@@ -46,6 +46,7 @@ const toDto = async (r: RequestRow): Promise<HomeRequestDto> => {
     relation: r.resident_relation.code,
     relationLabel: r.resident_relation.name,
     occupancy: r.occupancy_status.code,
+    occupancyName: r.occupancy_status.name,
     building: buildingDto(r.structure),
     flat: flatDto(r.structure),
     agreementStart: day(dated?.agreement_start ?? null),

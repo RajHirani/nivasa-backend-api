@@ -17,6 +17,7 @@ export interface ServiceProviderDto {
   id: string;
   name: string;
   phone: string;
+  countryCode: string;
   label: string;
   serviceType: ServiceTypeDto;
   rating: { average: number; count: number } | null;

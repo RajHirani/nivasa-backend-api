@@ -16,6 +16,7 @@ export interface HomeRequestDto {
   relation: string;
   relationLabel: string;
   occupancy: string;
+  occupancyName: string;
   building: BuildingDto | null;
   flat: FlatDto;
   agreementStart: string | null;

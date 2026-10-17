@@ -30,6 +30,7 @@ const notFound = () => new ApiError(404, 'NOT_FOUND', 'Service provider not foun
 
 const providerInclude = {
   service_type: { select: { id: true, code: true, name: true, is_daily_help: true } },
+  country: { select: { dial_code: true } },
 } satisfies Prisma.service_providerInclude;
 type ProviderRow = Prisma.service_providerGetPayload<{ include: typeof providerInclude }>;
 
@@ -91,6 +92,7 @@ export const toProviderDtos = async (rows: ProviderRow[], caller: Caller): Promi
       id: r.id.toString(),
       name: r.name,
       phone: r.phone,
+      countryCode: r.country.dial_code,
       label: r.service_type.name,
       serviceType: toServiceType(r.service_type),
       rating: r.service_type.is_daily_help
@@ -255,7 +257,12 @@ export const updateProvider = async (caller: Caller, providerId: bigint, input: 
   const data: Prisma.service_providerUncheckedUpdateInput = { updated_at: new Date() };
 
   if (input.name !== undefined) data.name = input.name;
-  if (input.mobile !== undefined && input.countryCode !== undefined) data.phone = phoneOf(input.countryCode, input.mobile);
+  if (input.mobile !== undefined && input.countryCode !== undefined) {
+    data.phone = phoneOf(input.countryCode, input.mobile);
+    const country = await prisma.country.findFirst({ where: { dial_code: input.countryCode, is_active: true }, select: { id: true } });
+    if (!country) throw invalid('countryCode', 'This country is not supported yet');
+    data.country_id = country.id; // the country whose dial code prefixes the phone
+  }
   if (input.serviceTypeId !== undefined) {
     const type = await prisma.service_type.findFirst({
       where: { id: Number(input.serviceTypeId), is_active: true, OR: [{ society_id: null }, { society_id: caller.societyId }] },

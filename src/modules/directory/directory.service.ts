@@ -104,7 +104,7 @@ const roleHolders = async (societyId: bigint, roleCodes: string[]) => {
         id: true,
         user_id: true,
         role: { select: { name: true, sort_order: true } },
-        app_user_user_society_role_user_idToapp_user: { select: { full_name: true, phone: true } },
+        app_user_user_society_role_user_idToapp_user: { select: { full_name: true, phone: true, country: { select: { dial_code: true } } } },
       },
     }),
     prisma.user_society_map.findMany({
@@ -116,9 +116,11 @@ const roleHolders = async (societyId: bigint, roleCodes: string[]) => {
   return assignments
     .filter((a) => !inactive.has(a.user_id))
     .map((a) => ({
-      id: `ur:${a.id}`,
+      userId: a.user_id.toString(),
+      societyContactId: null,
       name: a.app_user_user_society_role_user_idToapp_user.full_name,
       phone: a.app_user_user_society_role_user_idToapp_user.phone,
+      countryCode: a.app_user_user_society_role_user_idToapp_user.country.dial_code,
       label: a.role.name,
       order: a.role.sort_order,
     }))
@@ -129,15 +131,15 @@ const societyContacts = async (societyId: bigint, categoryCode: string): Promise
   const rows = await prisma.society_contact.findMany({
     where: { society_id: societyId, is_active: true, contact_category: { code: categoryCode } },
     orderBy: [{ sort_order: 'asc' }, { name: 'asc' }, { id: 'asc' }],
-    select: { id: true, name: true, title: true, phone: true },
+    select: { id: true, name: true, title: true, phone: true, country: { select: { dial_code: true } } },
   });
-  return rows.map((r) => ({ id: `sc:${r.id}`, name: r.name, phone: r.phone, label: r.title }));
+  return rows.map((r) => ({ userId: null, societyContactId: r.id.toString(), name: r.name, phone: r.phone, countryCode: r.country.dial_code, label: r.title, editable: true }));
 };
 
 export const listContacts = async (caller: Caller, type: 'COMMITTEE' | 'SERVICE' | 'EMERGENCY' | 'GUARDS'): Promise<DirectoryContactDto[]> => {
   switch (type) {
     case 'COMMITTEE':
-      return (await roleHolders(caller.societyId, env.directory.committeeRoleCodes)).map(({ order: _order, ...c }) => c);
+      return (await roleHolders(caller.societyId, env.directory.committeeRoleCodes)).map(({ order: _order, ...c }) => ({ ...c, editable: false }));
     case 'EMERGENCY':
       return societyContacts(caller.societyId, 'EMERGENCY');
     case 'SERVICE':
@@ -149,7 +151,7 @@ export const listContacts = async (caller: Caller, type: 'COMMITTEE' | 'SERVICE'
         societyContacts(caller.societyId, 'GUARD'),
       ]);
       const known = new Set(holders.map((h) => h.phone));
-      return [...holders.map(({ order: _order, ...c }) => c), ...contacts.filter((c) => !known.has(c.phone))];
+      return [...holders.map(({ order: _order, ...c }) => ({ ...c, editable: false })), ...contacts.filter((c) => !known.has(c.phone))];
     }
   }
 };
