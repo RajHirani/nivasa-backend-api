@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 import { ApiError } from '../../utils/api-error.js';
 import * as authService from '../auth/auth.service.js';
-import { clearRefreshCookie, readRefreshCookie, setRefreshCookie } from '../../lib/refresh-cookie.js';
+import { platformRefreshCookie as cookie } from '../../lib/refresh-cookie.js';
 import { requestPlatformOtpSchema, verifyPlatformOtpSchema } from './platform-auth.schema.js';
 import * as service from './platform-auth.service.js';
 
@@ -14,7 +14,7 @@ export const requestOtp: RequestHandler = async (req, res) => {
 export const verifyOtp: RequestHandler = async (req, res) => {
   const { email, otp } = verifyPlatformOtpSchema.parse(req.body);
   const { session, refreshToken } = await service.verifyOtp(email, otp, { ipAddress: req.ip });
-  setRefreshCookie(res, refreshToken);
+  cookie.set(res, refreshToken);
   res.json(session);
 };
 
@@ -24,22 +24,22 @@ export const me: RequestHandler = async (req, res) => {
 
 // Called when the console opens (to get an access token for the session in the cookie) and whenever the access token expires.
 export const refresh: RequestHandler = async (req, res) => {
-  const token = readRefreshCookie(req);
+  const token = cookie.read(req);
   if (!token) throw new ApiError(401, 'UNAUTHENTICATED', 'Please sign in');
   try {
     const rotated = await authService.refreshWithGrace(token);
-    if (rotated.refreshToken) setRefreshCookie(res, rotated.refreshToken);
+    if (rotated.refreshToken) cookie.set(res, rotated.refreshToken);
     res.json({ accessToken: rotated.accessToken, expiresIn: rotated.expiresIn });
   } catch (e) {
-    if (e instanceof ApiError && e.status === 401) clearRefreshCookie(res);
+    if (e instanceof ApiError && e.status === 401) cookie.clear(res);
     throw e;
   }
 };
 
 // Needs only the cookie, so a session whose access token has expired can still be ended.
 export const logout: RequestHandler = async (req, res) => {
-  const token = readRefreshCookie(req);
+  const token = cookie.read(req);
   if (token) await authService.endSessionByRefreshToken(token);
-  clearRefreshCookie(res);
+  cookie.clear(res);
   res.status(204).end();
 };

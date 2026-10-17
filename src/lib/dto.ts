@@ -14,10 +14,11 @@ export const cityDto = (c: { id: bigint; name: string; is_popular: boolean }): C
   isPopular: c.is_popular,
 });
 
-export const countryDto = (c: { id: bigint; name: string; iso_code: string }): CountryDto => ({
+export const countryDto = (c: { id: bigint; name: string; iso_code: string; dial_code: string }): CountryDto => ({
   id: c.id.toString(),
   name: c.name,
   isoCode: c.iso_code,
+  dialCode: c.dial_code,
 });
 
 // A unit (flat/house) belongs to a building (wing/section) when it has one; houses may have none.

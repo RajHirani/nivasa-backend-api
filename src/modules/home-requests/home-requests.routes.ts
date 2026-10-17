@@ -8,6 +8,8 @@ export const homeRequestsRouter = Router();
 
 homeRequestsRouter.use(authenticate, requireMembership);
 homeRequestsRouter.get('/', requirePermission('HOME_REQUEST_VIEW'), controller.list);
+// Fixed path before /:requestId.
+homeRequestsRouter.get('/counts', requirePermission('HOME_REQUEST_VIEW'), controller.counts);
 homeRequestsRouter.get('/:requestId', requirePermission('HOME_REQUEST_VIEW'), controller.get);
 homeRequestsRouter.post('/:requestId/approve', requirePermission('HOME_REQUEST_REVIEW'), controller.approve);
 homeRequestsRouter.post('/:requestId/reject', requirePermission('HOME_REQUEST_REVIEW'), controller.reject);

@@ -1,25 +1,32 @@
 import type { CookieOptions, Request, Response } from 'express';
 import { env } from '../config/env.js';
 
-// The platform console's refresh token lives only in this cookie: httpOnly (scripts cannot read it),
-// SameSite=Strict (never sent from another site), and limited to the auth endpoints that need it.
-export const REFRESH_COOKIE = 'nivas_platform_refresh';
-const PATH = '/api/v1/platform/auth';
+// A web client's refresh token lives only in a cookie: httpOnly (scripts cannot read it), SameSite=Strict (never sent
+// from another site), and limited to the auth endpoints that need it. Each web client has its own cookie.
+export interface RefreshCookie {
+  set: (res: Response, token: string) => void;
+  clear: (res: Response) => void;
+  read: (req: Request) => string | null;
+}
 
-const options = (): CookieOptions => ({ httpOnly: true, secure: env.cookie.secure, sameSite: 'strict', path: PATH });
-
-export const setRefreshCookie = (res: Response, token: string): void => {
-  res.cookie(REFRESH_COOKIE, token, { ...options(), maxAge: env.jwt.refreshTtlDays * 86_400_000 });
+const refreshCookie = (name: string, path: string): RefreshCookie => {
+  const options = (): CookieOptions => ({ httpOnly: true, secure: env.cookie.secure, sameSite: 'strict', path });
+  return {
+    set: (res, token) => {
+      res.cookie(name, token, { ...options(), maxAge: env.jwt.refreshTtlDays * 86_400_000 });
+    },
+    clear: (res) => {
+      res.clearCookie(name, options());
+    },
+    read: (req) => {
+      for (const part of req.headers.cookie?.split(';') ?? []) {
+        const [key, ...value] = part.trim().split('=');
+        if (key === name && value.length) return decodeURIComponent(value.join('='));
+      }
+      return null;
+    },
+  };
 };
 
-export const clearRefreshCookie = (res: Response): void => {
-  res.clearCookie(REFRESH_COOKIE, options());
-};
-
-export const readRefreshCookie = (req: Request): string | null => {
-  for (const part of req.headers.cookie?.split(';') ?? []) {
-    const [name, ...value] = part.trim().split('=');
-    if (name === REFRESH_COOKIE && value.length) return decodeURIComponent(value.join('='));
-  }
-  return null;
-};
+export const platformRefreshCookie = refreshCookie('nivas_platform_refresh', '/api/v1/platform/auth');
+export const portalRefreshCookie = refreshCookie('nivas_portal_refresh', '/api/v1/portal/auth');
