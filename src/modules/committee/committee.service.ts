@@ -263,6 +263,14 @@ export const removeMember = async (societyId: bigint, actorId: bigint, assignmen
     const row = await currentAssignment(tx, societyId, assignmentId);
     await guardLastPresident(tx, societyId, row);
     await endRow(tx, row.id, actorId);
+
+    // Leaving the committee also ends the society membership, unless the person lives here or still holds another role.
+    const home = await tx.user_resident_map.findFirst({ where: { user_id: row.user_id, society_id: societyId, move_out_date: null, is_active: true }, select: { id: true } });
+    const otherRole = await tx.user_society_role.findFirst({ where: { user_id: row.user_id, society_id: societyId, end_date: null, is_active: true }, select: { id: true } });
+    if (!home && !otherRole) {
+      const now = new Date();
+      await tx.user_society_map.updateMany({ where: { user_id: row.user_id, society_id: societyId, left_at: null }, data: { left_at: now, updated_at: now } });
+    }
   });
 };
 
