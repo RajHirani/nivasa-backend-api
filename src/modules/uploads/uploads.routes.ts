@@ -21,4 +21,10 @@ uploadsRouter.post('/', authenticate, multipart, controller.upload);
 uploadsRouter.delete('/:uploadId', authenticate, controller.remove);
 
 export const filesRouter = Router();
+// Signed links are shown as <img> by the web clients (portal, console), which run on another origin than the API: helmet's default
+// Cross-Origin-Resource-Policy: same-origin would block them. The signature is the access control.
+filesRouter.use((_req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+});
 filesRouter.get('/*key', controller.download);

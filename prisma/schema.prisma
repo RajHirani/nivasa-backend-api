@@ -33,6 +33,11 @@ model app_user {
   society_activity                                           society_activity[]
   society_contact                                            society_contact[]
   society_module                                             society_module[]
+  ticket_ticket_assignee_idToapp_user                        ticket[]                     @relation("ticket_assignee_idToapp_user")
+  ticket_ticket_raised_byToapp_user                          ticket[]                     @relation("ticket_raised_byToapp_user")
+  ticket_comment                                             ticket_comment[]
+  ticket_event_ticket_event_actor_idToapp_user               ticket_event[]               @relation("ticket_event_actor_idToapp_user")
+  ticket_event_ticket_event_assignee_idToapp_user            ticket_event[]               @relation("ticket_event_assignee_idToapp_user")
   upload                                                     upload[]
   user_platform_role_user_platform_role_ended_byToapp_user   user_platform_role[]         @relation("user_platform_role_ended_byToapp_user")
   user_platform_role_user_platform_role_granted_byToapp_user user_platform_role[]         @relation("user_platform_role_granted_byToapp_user")
@@ -303,6 +308,8 @@ model role {
   role_scope         role_scope           @relation(fields: [role_scope_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   society            society?             @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   role_permission    role_permission[]
+  ticket_comment     ticket_comment[]
+  ticket_event       ticket_event[]
   user_platform_role user_platform_role[]
   user_society_role  user_society_role[]
 }
@@ -361,6 +368,8 @@ model society {
   society_contact     society_contact[]
   society_module      society_module[]
   structure           structure[]
+  ticket              ticket[]
+  ticket_counter      ticket_counter?
   user_resident_map   user_resident_map[]
   user_society_map    user_society_map[]
   user_society_role   user_society_role[]
@@ -404,6 +413,7 @@ model structure {
   other_structure_structure_parent_idTostructure   structure[]                  @relation("structure_parent_idTostructure")
   society                                          society                      @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   structure_type                                   structure_type               @relation(fields: [structure_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket                                           ticket[]
   user_resident_map                                user_resident_map[]
 
   @@index([building_id], map: "idx_structure_building")
@@ -439,6 +449,8 @@ model upload {
   created_at            DateTime                @default(now()) @db.Timestamptz(6)
   home_request_document home_request_document[]
   society               society[]
+  ticket_comment_photo  ticket_comment_photo[]
+  ticket_photo          ticket_photo[]
   upload_purpose        upload_purpose          @relation(fields: [upload_purpose_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   app_user              app_user                @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
@@ -733,4 +745,174 @@ model committee_term {
   user_society_role                            user_society_role[]
 
   @@index([society_id, start_date(sort: Desc)], map: "idx_committee_term_society_start")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket {
+  id                                    BigInt              @id @default(autoincrement())
+  society_id                            BigInt
+  ticket_no                             Int
+  unit_id                               BigInt?
+  raised_by                             BigInt
+  request_type_id                       Int                 @db.SmallInt
+  category_id                           Int                 @db.SmallInt
+  location_id                           Int?                @db.SmallInt
+  priority_id                           Int                 @db.SmallInt
+  title                                 String              @db.VarChar(80)
+  description                           String
+  status_id                             Int                 @db.SmallInt
+  assignee_id                           BigInt?
+  created_at                            DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at                            DateTime            @default(now()) @db.Timestamptz(6)
+  app_user_ticket_assignee_idToapp_user app_user?           @relation("ticket_assignee_idToapp_user", fields: [assignee_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket_category                       ticket_category     @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket_location                       ticket_location?    @relation(fields: [location_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket_priority                       ticket_priority     @relation(fields: [priority_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_ticket_raised_byToapp_user   app_user            @relation("ticket_raised_byToapp_user", fields: [raised_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket_request_type                   ticket_request_type @relation(fields: [request_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society                               society             @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket_status                         ticket_status       @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  structure                             structure?          @relation(fields: [unit_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket_comment                        ticket_comment[]
+  ticket_event                          ticket_event[]
+  ticket_photo                          ticket_photo[]
+
+  @@unique([society_id, ticket_no], map: "uq_ticket_society_no")
+  @@index([raised_by], map: "idx_ticket_raised_by")
+  @@index([society_id, created_at(sort: Desc)], map: "idx_ticket_society_created")
+  @@index([society_id, status_id], map: "idx_ticket_society_status")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_category {
+  id         Int      @id @db.SmallInt
+  code       String   @unique
+  name       String
+  sort_order Int      @default(0) @db.SmallInt
+  is_active  Boolean  @default(true)
+  ticket     ticket[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_comment {
+  id                   BigInt                 @id @default(autoincrement())
+  ticket_id            BigInt
+  author_id            BigInt
+  author_role_id       Int?
+  body                 String
+  edited_at            DateTime?              @db.Timestamptz(6)
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  app_user             app_user               @relation(fields: [author_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role                 role?                  @relation(fields: [author_role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket               ticket                 @relation(fields: [ticket_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket_comment_photo ticket_comment_photo[]
+
+  @@index([ticket_id, created_at], map: "idx_ticket_comment_ticket")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_comment_photo {
+  comment_id     BigInt
+  upload_id      BigInt
+  created_at     DateTime       @default(now()) @db.Timestamptz(6)
+  ticket_comment ticket_comment @relation(fields: [comment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  upload         upload         @relation(fields: [upload_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([comment_id, upload_id])
+  @@index([upload_id], map: "idx_ticket_comment_photo_upload")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_counter {
+  society_id BigInt  @id
+  last_no    Int     @default(0)
+  society    society @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_event {
+  id                                          BigInt            @id @default(autoincrement())
+  ticket_id                                   BigInt
+  event_type_id                               Int               @db.SmallInt
+  status_id                                   Int               @db.SmallInt
+  actor_id                                    BigInt
+  actor_role_id                               Int?
+  assignee_id                                 BigInt?
+  note                                        String?
+  created_at                                  DateTime          @default(now()) @db.Timestamptz(6)
+  app_user_ticket_event_actor_idToapp_user    app_user          @relation("ticket_event_actor_idToapp_user", fields: [actor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role                                        role?             @relation(fields: [actor_role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_ticket_event_assignee_idToapp_user app_user?         @relation("ticket_event_assignee_idToapp_user", fields: [assignee_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket_event_type                           ticket_event_type @relation(fields: [event_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket_status                               ticket_status     @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket                                      ticket            @relation(fields: [ticket_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket_photo                                ticket_photo[]
+
+  @@index([ticket_id, created_at], map: "idx_ticket_event_ticket")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_event_type {
+  id           Int            @id @db.SmallInt
+  code         String         @unique
+  name         String
+  sort_order   Int            @default(0) @db.SmallInt
+  is_active    Boolean        @default(true)
+  ticket_event ticket_event[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_location {
+  id         Int      @id @db.SmallInt
+  code       String   @unique
+  name       String
+  sort_order Int      @default(0) @db.SmallInt
+  is_active  Boolean  @default(true)
+  ticket     ticket[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_photo {
+  ticket_id    BigInt
+  upload_id    BigInt
+  event_id     BigInt?
+  created_at   DateTime      @default(now()) @db.Timestamptz(6)
+  ticket_event ticket_event? @relation(fields: [event_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket       ticket        @relation(fields: [ticket_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  upload       upload        @relation(fields: [upload_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([ticket_id, upload_id])
+  @@index([upload_id], map: "idx_ticket_photo_upload")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_priority {
+  id         Int      @id @db.SmallInt
+  code       String   @unique
+  name       String
+  sort_order Int      @default(0) @db.SmallInt
+  is_active  Boolean  @default(true)
+  ticket     ticket[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_request_type {
+  id         Int      @id @db.SmallInt
+  code       String   @unique
+  name       String
+  sort_order Int      @default(0) @db.SmallInt
+  is_active  Boolean  @default(true)
+  ticket     ticket[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ticket_status {
+  id           Int            @id @db.SmallInt
+  code         String         @unique
+  name         String
+  is_final     Boolean        @default(false)
+  sort_order   Int            @default(0) @db.SmallInt
+  is_active    Boolean        @default(true)
+  ticket       ticket[]
+  ticket_event ticket_event[]
 }

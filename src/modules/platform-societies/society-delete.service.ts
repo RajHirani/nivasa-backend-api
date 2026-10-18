@@ -26,7 +26,9 @@ export const deleteSociety = async (societyId: bigint, actorId: bigint, confirmN
       const uploads = await tx.$queryRaw<{ id: bigint; storage_key: string }[]>`
         SELECT u.id, u.storage_key FROM upload u
         WHERE u.id = (SELECT logo_upload_id FROM society WHERE id = ${societyId})
-           OR u.id IN (SELECT d.upload_id FROM home_request_document d JOIN home_request h ON h.id = d.home_request_id WHERE h.society_id = ${societyId})`;
+           OR u.id IN (SELECT d.upload_id FROM home_request_document d JOIN home_request h ON h.id = d.home_request_id WHERE h.society_id = ${societyId})
+           OR u.id IN (SELECT p.upload_id FROM ticket_photo p JOIN ticket t ON t.id = p.ticket_id WHERE t.society_id = ${societyId})
+           OR u.id IN (SELECT p.upload_id FROM ticket_comment_photo p JOIN ticket_comment c ON c.id = p.comment_id JOIN ticket t ON t.id = c.ticket_id WHERE t.society_id = ${societyId})`;
       storageKeys = uploads.map((u) => u.storage_key);
 
       // Service directory: reviews and households point at both the provider and the unit.
@@ -36,6 +38,13 @@ export const deleteSociety = async (societyId: bigint, actorId: bigint, confirmN
         OR unit_id IN (SELECT id FROM structure WHERE society_id = ${societyId})`;
       await tx.$executeRaw`DELETE FROM service_provider WHERE society_id = ${societyId}`;
       await tx.$executeRaw`DELETE FROM service_type WHERE society_id = ${societyId}`;
+      // Help Desk: comments and photos first, then events, the complaints (they point at units and people) and the counter.
+      await tx.$executeRaw`DELETE FROM ticket_comment_photo WHERE comment_id IN (SELECT c.id FROM ticket_comment c JOIN ticket t ON t.id = c.ticket_id WHERE t.society_id = ${societyId})`;
+      await tx.$executeRaw`DELETE FROM ticket_comment WHERE ticket_id IN (SELECT id FROM ticket WHERE society_id = ${societyId})`;
+      await tx.$executeRaw`DELETE FROM ticket_photo WHERE ticket_id IN (SELECT id FROM ticket WHERE society_id = ${societyId})`;
+      await tx.$executeRaw`DELETE FROM ticket_event WHERE ticket_id IN (SELECT id FROM ticket WHERE society_id = ${societyId})`;
+      await tx.$executeRaw`DELETE FROM ticket WHERE society_id = ${societyId}`;
+      await tx.$executeRaw`DELETE FROM ticket_counter WHERE society_id = ${societyId}`;
       // Homes: residents refer to their request, requests to their documents and units.
       await tx.$executeRaw`DELETE FROM user_resident_map WHERE society_id = ${societyId}`;
       await tx.$executeRaw`DELETE FROM home_request_document WHERE home_request_id IN (SELECT id FROM home_request WHERE society_id = ${societyId})`;

@@ -15,6 +15,7 @@ import { platformSocietiesRouter } from '../modules/platform-societies/platform-
 import { societyWizardRouter } from '../modules/platform-society-wizard/society-wizard.routes.js';
 import { platformLocationsRouter } from '../modules/platform-locations/platform-locations.routes.js';
 import { committeeRouter } from '../modules/committee/committee.routes.js';
+import { helpdeskRouter } from '../modules/helpdesk/helpdesk.routes.js';
 import { rolesRouter } from '../modules/roles/roles.routes.js';
 import { homeRequestsRouter } from '../modules/home-requests/home-requests.routes.js';
 
@@ -30,6 +31,7 @@ apiRouter.use('/homes', homesRouter);
 apiRouter.use('/home-requests', homeRequestsRouter);
 apiRouter.use('/committee', committeeRouter);
 apiRouter.use('/roles', rolesRouter);
+apiRouter.use('/helpdesk', helpdeskRouter);
 apiRouter.use('/directory', directoryRouter);
 apiRouter.use('/daily-help', dailyHelpRouter);
 apiRouter.use('/admin', adminRouter);

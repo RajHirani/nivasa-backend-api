@@ -6,6 +6,7 @@ export const CACHE_KEYS = {
   UPLOAD_PURPOSES: 'UPLOAD_PURPOSES',
   LOOKUPS: 'LOOKUPS',
   SOCIETY_SETUP: 'SOCIETY_SETUP',
+  HELPDESK_LOOKUPS: 'HELPDESK_LOOKUPS',
 } as const;
 export type CacheKey = (typeof CACHE_KEYS)[keyof typeof CACHE_KEYS];
 
