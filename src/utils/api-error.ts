@@ -38,6 +38,8 @@ export type ErrorCode =
   | 'PHONE_BELONGS_TO_RESIDENT'
   | 'TERM_NAME_TAKEN'
   | 'TERM_NOT_CURRENT'
+  | 'ROLE_NAME_TAKEN'
+  | 'ROLE_LOCKED'
   | 'INTERNAL_ERROR';
 
 export interface ErrorDetail {
