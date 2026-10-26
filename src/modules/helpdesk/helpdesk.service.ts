@@ -1,6 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { storage } from '../../lib/storage/index.js';
+import { actorRoleId } from '../../lib/actor-role.js';
+import { claimUploads } from '../../lib/uploads-claim.js';
 import { ApiError, type ErrorCode } from '../../utils/api-error.js';
 import { getTicket, helpdeskLookups, isCommittee, lookupId, RESIDENT_CANCELLABLE, STATUS, ticketNumber, type Ctx } from './helpdesk.read.js';
 import type { CommentInput, CreateTicketInput, UpdateStatusInput } from './helpdesk.schema.js';
@@ -15,16 +17,6 @@ const invalidTransition = (message: string) => new ApiError(409, 'TICKET_INVALID
 
 // ---------------------------------------------------------------- shared pieces
 
-// The role the actor holds in this society today (the one listed first), kept with the event or comment so the history stays
-// right after a term change. NULL for someone without a society role: a resident.
-const actorRoleId = async (tx: Tx, societyId: bigint, userId: bigint): Promise<number | null> => {
-  const rows = await tx.user_society_role.findMany({
-    where: { society_id: societyId, user_id: userId, end_date: null, is_active: true, role: { is_active: true } },
-    select: { role: { select: { id: true, sort_order: true } } },
-  });
-  return rows.sort((a, b) => a.role.sort_order - b.role.sort_order)[0]?.role.id ?? null;
-};
-
 // A complaint of this society the caller may see (404 otherwise).
 const loadTicket = async (tx: Tx, ctx: Ctx, ticketId: bigint) => {
   const t = await tx.ticket.findFirst({
@@ -37,17 +29,6 @@ const loadTicket = async (tx: Tx, ctx: Ctx, ticketId: bigint) => {
   });
   if (!t) throw notFound();
   return { ...t, status: t.ticket_status.code };
-};
-
-// Photos are fresh uploads of the caller with the right purpose, claimed once (attached_at) and linked by the caller.
-const claimUploads = async (tx: Tx, userId: bigint, ids: string[], purpose: string): Promise<bigint[]> => {
-  const wanted = [...new Set(ids)].map(BigInt);
-  if (wanted.length === 0) return [];
-  const own = await tx.upload.count({ where: { id: { in: wanted }, user_id: userId, upload_purpose: { code: purpose } } });
-  if (own !== wanted.length) throw fieldError(400, 'VALIDATION_FAILED', 'photoIds', 'One of the photos is not valid');
-  const claimed = await tx.upload.updateMany({ where: { id: { in: wanted }, attached_at: null }, data: { attached_at: new Date() } });
-  if (claimed.count !== wanted.length) throw new ApiError(409, 'UPLOAD_IN_USE', 'One of the photos is already used');
-  return wanted;
 };
 
 const touch = (tx: Tx, ticketId: bigint, data: Prisma.ticketUncheckedUpdateInput = {}) =>

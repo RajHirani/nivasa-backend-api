@@ -92,10 +92,10 @@ export const createUpload = async (
 export const deleteUpload = async (userId: bigint, uploadId: bigint): Promise<void> => {
   const upload = await prisma.upload.findUnique({
     where: { id: uploadId },
-    select: { user_id: true, storage_key: true, attached_at: true, _count: { select: { home_request_document: true } } },
+    select: { user_id: true, storage_key: true, attached_at: true },
   });
   if (!upload || upload.user_id !== userId) throw new ApiError(404, 'NOT_FOUND', 'File not found');
-  if (upload.attached_at || upload._count.home_request_document > 0) {
+  if (upload.attached_at) {
     throw new ApiError(409, 'UPLOAD_IN_USE', 'This file is already attached and cannot be removed');
   }
   await prisma.upload.delete({ where: { id: uploadId } });
@@ -103,10 +103,11 @@ export const deleteUpload = async (userId: bigint, uploadId: bigint): Promise<vo
 };
 
 // Unattached uploads older than 24 h are removed (contract). Returns how many were deleted.
+// `attached_at` is the one rule for "linked": every module sets it in the same transaction that links the file.
 export const deleteStaleUploads = async (): Promise<number> => {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const stale = await prisma.upload.findMany({
-    where: { attached_at: null, created_at: { lt: cutoff }, home_request_document: { none: {} } },
+    where: { attached_at: null, created_at: { lt: cutoff } },
     select: { id: true, storage_key: true },
     take: 200,
   });

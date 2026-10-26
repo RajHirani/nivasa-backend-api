@@ -41,6 +41,7 @@ export type ErrorCode =
   | 'TICKET_INVALID_TRANSITION'
   | 'ROLE_NAME_TAKEN'
   | 'ROLE_LOCKED'
+  | 'NOTICE_READ_ONLY'
   | 'INTERNAL_ERROR';
 
 export interface ErrorDetail {

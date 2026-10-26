@@ -27,6 +27,8 @@ export const deleteSociety = async (societyId: bigint, actorId: bigint, confirmN
         SELECT u.id, u.storage_key FROM upload u
         WHERE u.id = (SELECT logo_upload_id FROM society WHERE id = ${societyId})
            OR u.id IN (SELECT d.upload_id FROM home_request_document d JOIN home_request h ON h.id = d.home_request_id WHERE h.society_id = ${societyId})
+           OR u.id IN (SELECT n.banner_upload_id FROM notice n WHERE n.society_id = ${societyId} AND n.banner_upload_id IS NOT NULL)
+           OR u.id IN (SELECT a.upload_id FROM notice_attachment a JOIN notice n ON n.id = a.notice_id WHERE n.society_id = ${societyId})
            OR u.id IN (SELECT p.upload_id FROM ticket_photo p JOIN ticket t ON t.id = p.ticket_id WHERE t.society_id = ${societyId})
            OR u.id IN (SELECT p.upload_id FROM ticket_comment_photo p JOIN ticket_comment c ON c.id = p.comment_id JOIN ticket t ON t.id = c.ticket_id WHERE t.society_id = ${societyId})`;
       storageKeys = uploads.map((u) => u.storage_key);
@@ -45,6 +47,10 @@ export const deleteSociety = async (societyId: bigint, actorId: bigint, confirmN
       await tx.$executeRaw`DELETE FROM ticket_event WHERE ticket_id IN (SELECT id FROM ticket WHERE society_id = ${societyId})`;
       await tx.$executeRaw`DELETE FROM ticket WHERE society_id = ${societyId}`;
       await tx.$executeRaw`DELETE FROM ticket_counter WHERE society_id = ${societyId}`;
+      // Notices: attachments and blocks first (the blocks point at the structure), then the notices.
+      await tx.$executeRaw`DELETE FROM notice_attachment WHERE notice_id IN (SELECT id FROM notice WHERE society_id = ${societyId})`;
+      await tx.$executeRaw`DELETE FROM notice_building WHERE notice_id IN (SELECT id FROM notice WHERE society_id = ${societyId})`;
+      await tx.$executeRaw`DELETE FROM notice WHERE society_id = ${societyId}`;
       // Homes: residents refer to their request, requests to their documents and units.
       await tx.$executeRaw`DELETE FROM user_resident_map WHERE society_id = ${societyId}`;
       await tx.$executeRaw`DELETE FROM home_request_document WHERE home_request_id IN (SELECT id FROM home_request WHERE society_id = ${societyId})`;

@@ -7,6 +7,7 @@ export const CACHE_KEYS = {
   LOOKUPS: 'LOOKUPS',
   SOCIETY_SETUP: 'SOCIETY_SETUP',
   HELPDESK_LOOKUPS: 'HELPDESK_LOOKUPS',
+  NOTICE_LOOKUPS: 'NOTICE_LOOKUPS',
 } as const;
 export type CacheKey = (typeof CACHE_KEYS)[keyof typeof CACHE_KEYS];
 

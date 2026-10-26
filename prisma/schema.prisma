@@ -25,6 +25,9 @@ model app_user {
   committee_term_committee_term_created_byToapp_user         committee_term[]             @relation("committee_term_created_byToapp_user")
   home_request_home_request_reviewed_byToapp_user            home_request[]               @relation("home_request_reviewed_byToapp_user")
   home_request_home_request_user_idToapp_user                home_request[]               @relation("home_request_user_idToapp_user")
+  notice_notice_created_byToapp_user                         notice[]                     @relation("notice_created_byToapp_user")
+  notice_notice_deleted_byToapp_user                         notice[]                     @relation("notice_deleted_byToapp_user")
+  notice_notice_updated_byToapp_user                         notice[]                     @relation("notice_updated_byToapp_user")
   role                                                       role[]
   service_provider                                           service_provider[]
   service_provider_household                                 service_provider_household[]
@@ -81,6 +84,37 @@ model city {
 
   @@unique([country_id, name], map: "uq_city_country_name")
   @@unique([id, country_id], map: "uq_city_id_country")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model committee_term {
+  id                                           BigInt              @id @default(autoincrement())
+  society_id                                   BigInt
+  name                                         String
+  start_date                                   DateTime            @db.Date
+  end_date                                     DateTime?           @db.Date
+  closed_at                                    DateTime?           @db.Timestamptz(6)
+  closed_by                                    BigInt?
+  created_by                                   BigInt?
+  created_at                                   DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at                                   DateTime            @default(now()) @db.Timestamptz(6)
+  app_user_committee_term_closed_byToapp_user  app_user?           @relation("committee_term_closed_byToapp_user", fields: [closed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_committee_term_created_byToapp_user app_user?           @relation("committee_term_created_byToapp_user", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society                                      society             @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user_society_role                            user_society_role[]
+
+  @@index([society_id, start_date(sort: Desc)], map: "idx_committee_term_society_start")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model contact_category {
+  id              Int               @id @db.SmallInt
+  code            String            @unique
+  name            String
+  sort_order      Int               @default(0) @db.SmallInt
+  is_active       Boolean           @default(true)
+  society_contact society_contact[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -184,6 +218,86 @@ model member_status {
   sort_order       Int                @default(0) @db.SmallInt
   is_active        Boolean            @default(true)
   user_society_map user_society_map[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model module {
+  id             Int              @id @db.SmallInt
+  code           String           @unique
+  name           String
+  description    String?
+  sort_order     Int              @default(0) @db.SmallInt
+  is_active      Boolean          @default(true)
+  society_module society_module[]
+}
+
+model notice {
+  id                                   BigInt              @id @default(autoincrement())
+  society_id                           BigInt
+  title                                String              @db.VarChar(100)
+  body                                 String
+  audience_id                          Int                 @db.SmallInt
+  status_id                            Int                 @db.SmallInt
+  expires_on                           DateTime?           @db.Date
+  is_pinned                            Boolean             @default(false)
+  banner_upload_id                     BigInt?
+  created_by                           BigInt
+  created_role_id                      Int?
+  created_at                           DateTime            @default(now()) @db.Timestamptz(6)
+  updated_by                           BigInt?
+  updated_at                           DateTime            @default(now()) @db.Timestamptz(6)
+  deleted_by                           BigInt?
+  deleted_at                           DateTime?           @db.Timestamptz(6)
+  notice_audience                      notice_audience     @relation(fields: [audience_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  upload                               upload?             @relation(fields: [banner_upload_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_notice_created_byToapp_user app_user            @relation("notice_created_byToapp_user", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role                                 role?               @relation(fields: [created_role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_notice_deleted_byToapp_user app_user?           @relation("notice_deleted_byToapp_user", fields: [deleted_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society                              society             @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  notice_status                        notice_status       @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_notice_updated_byToapp_user app_user?           @relation("notice_updated_byToapp_user", fields: [updated_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  notice_attachment                    notice_attachment[]
+  notice_building                      notice_building[]
+
+  @@index([society_id, status_id, created_at], map: "ix_notice_society_status")
+}
+
+model notice_attachment {
+  notice_id  BigInt
+  upload_id  BigInt
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  notice     notice   @relation(fields: [notice_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  upload     upload   @relation(fields: [upload_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([notice_id, upload_id])
+}
+
+model notice_audience {
+  id         Int      @id @db.SmallInt
+  code       String   @unique
+  name       String
+  sort_order Int      @default(0) @db.SmallInt
+  is_active  Boolean  @default(true)
+  notice     notice[]
+}
+
+model notice_building {
+  notice_id   BigInt
+  building_id BigInt
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  structure   structure @relation(fields: [building_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  notice      notice    @relation(fields: [notice_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([notice_id, building_id])
+}
+
+model notice_status {
+  id         Int      @id @db.SmallInt
+  code       String   @unique
+  name       String
+  sort_order Int      @default(0) @db.SmallInt
+  is_active  Boolean  @default(true)
+  notice     notice[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -304,6 +418,7 @@ model role {
   is_active          Boolean              @default(true)
   created_at         DateTime             @default(now()) @db.Timestamptz(6)
   updated_at         DateTime             @default(now()) @db.Timestamptz(6)
+  notice             notice[]
   app_user           app_user?            @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
   role_scope         role_scope           @relation(fields: [role_scope_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   society            society?             @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -335,196 +450,6 @@ model role_scope {
   is_active  Boolean      @default(true)
   permission permission[]
   role       role[]
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
-model society {
-  id                  BigInt              @id @default(autoincrement())
-  name                String              @db.VarChar(150)
-  society_type_id     Int                 @db.SmallInt
-  country_id          BigInt
-  city_id             BigInt
-  address             String?
-  phone               String?             @db.VarChar(20)
-  email               String?             @db.VarChar(120)
-  pincode             String?             @db.VarChar(12)
-  latitude            Decimal?            @db.Decimal(9, 6)
-  longitude           Decimal?            @db.Decimal(9, 6)
-  registration_number String?             @db.VarChar(50)
-  is_active           Boolean             @default(true)
-  created_at          DateTime            @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime            @default(now()) @db.Timestamptz(6)
-  logo_upload_id      BigInt?
-  committee_term      committee_term[]
-  home_request        home_request[]
-  role                role[]
-  service_provider    service_provider[]
-  service_type        service_type[]
-  city                city                @relation(fields: [city_id, country_id], references: [id, country_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_society_city_country")
-  upload              upload?             @relation(fields: [logo_upload_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  society_type        society_type        @relation(fields: [society_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  society_activity    society_activity[]
-  society_contact     society_contact[]
-  society_module      society_module[]
-  structure           structure[]
-  ticket              ticket[]
-  ticket_counter      ticket_counter?
-  user_resident_map   user_resident_map[]
-  user_society_map    user_society_map[]
-  user_society_role   user_society_role[]
-
-  @@index([country_id], map: "idx_society_country")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model society_type {
-  id         Int       @id @db.SmallInt
-  code       String    @unique
-  name       String
-  sort_order Int       @default(0) @db.SmallInt
-  is_active  Boolean   @default(true)
-  society    society[]
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model structure {
-  id                                               BigInt                       @id @default(autoincrement())
-  society_id                                       BigInt
-  parent_id                                        BigInt?
-  structure_type_id                                Int                          @db.SmallInt
-  identifier                                       String                       @db.VarChar(50)
-  floor_number                                     Int?                         @db.SmallInt
-  sort_order                                       Int                          @default(0)
-  building_id                                      BigInt?
-  floor_id                                         BigInt?
-  full_address                                     String?
-  is_active                                        Boolean                      @default(true)
-  created_at                                       DateTime                     @default(now()) @db.Timestamptz(6)
-  updated_at                                       DateTime                     @default(now()) @db.Timestamptz(6)
-  home_request                                     home_request[]
-  service_provider_household                       service_provider_household[]
-  service_provider_review                          service_provider_review[]
-  structure_structure_building_idTostructure       structure?                   @relation("structure_building_idTostructure", fields: [building_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  other_structure_structure_building_idTostructure structure[]                  @relation("structure_building_idTostructure")
-  structure_structure_floor_idTostructure          structure?                   @relation("structure_floor_idTostructure", fields: [floor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  other_structure_structure_floor_idTostructure    structure[]                  @relation("structure_floor_idTostructure")
-  structure_structure_parent_idTostructure         structure?                   @relation("structure_parent_idTostructure", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  other_structure_structure_parent_idTostructure   structure[]                  @relation("structure_parent_idTostructure")
-  society                                          society                      @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  structure_type                                   structure_type               @relation(fields: [structure_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  ticket                                           ticket[]
-  user_resident_map                                user_resident_map[]
-
-  @@index([building_id], map: "idx_structure_building")
-  @@index([floor_id], map: "idx_structure_floor")
-  @@index([parent_id], map: "idx_structure_parent")
-  @@index([society_id, structure_type_id, sort_order], map: "idx_structure_society_type")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model structure_type {
-  id          Int         @id @db.SmallInt
-  code        String      @unique
-  name        String
-  is_building Boolean     @default(false)
-  is_unit     Boolean     @default(false)
-  sort_order  Int         @default(0) @db.SmallInt
-  is_active   Boolean     @default(true)
-  structure   structure[]
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model upload {
-  id                    BigInt                  @id @default(autoincrement())
-  user_id               BigInt
-  upload_purpose_id     Int                     @db.SmallInt
-  file_name             String                  @db.VarChar(255)
-  content_type          String                  @db.VarChar(100)
-  size_bytes            BigInt
-  storage_key           String                  @unique(map: "uq_upload_storage_key") @db.VarChar(500)
-  agreement_start       DateTime?               @db.Date
-  agreement_end         DateTime?               @db.Date
-  attached_at           DateTime?               @db.Timestamptz(6)
-  created_at            DateTime                @default(now()) @db.Timestamptz(6)
-  home_request_document home_request_document[]
-  society               society[]
-  ticket_comment_photo  ticket_comment_photo[]
-  ticket_photo          ticket_photo[]
-  upload_purpose        upload_purpose          @relation(fields: [upload_purpose_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  app_user              app_user                @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([user_id], map: "idx_upload_user")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model upload_purpose {
-  id                    Int      @id @db.SmallInt
-  code                  String   @unique
-  name                  String
-  allowed_content_types String[]
-  max_mb                Int      @db.SmallInt
-  sort_order            Int      @default(0) @db.SmallInt
-  is_active             Boolean  @default(true)
-  upload                upload[]
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model user_resident_map {
-  id                   BigInt            @id @default(autoincrement())
-  user_id              BigInt
-  unit_id              BigInt
-  society_id           BigInt
-  resident_role_id     Int               @db.SmallInt
-  resident_relation_id Int               @db.SmallInt
-  occupancy_status_id  Int               @db.SmallInt
-  home_request_id      BigInt?
-  move_in_date         DateTime?         @db.Date
-  move_out_date        DateTime?         @db.Date
-  is_active            Boolean           @default(true)
-  created_at           DateTime          @default(now()) @db.Timestamptz(6)
-  updated_at           DateTime          @default(now()) @db.Timestamptz(6)
-  home_request         home_request?     @relation(fields: [home_request_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  occupancy_status     occupancy_status  @relation(fields: [occupancy_status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  resident_relation    resident_relation @relation(fields: [resident_relation_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  resident_role        resident_role     @relation(fields: [resident_role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  society              society           @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  structure            structure         @relation(fields: [unit_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  app_user             app_user          @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([society_id, occupancy_status_id], map: "idx_user_resident_society_occupancy")
-  @@index([unit_id], map: "idx_user_resident_unit")
-  @@index([user_id], map: "idx_user_resident_user")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model user_society_map {
-  id                                           BigInt        @id @default(autoincrement())
-  user_id                                      BigInt
-  society_id                                   BigInt
-  member_status_id                             Int           @db.SmallInt
-  joined_at                                    DateTime      @default(now()) @db.Timestamptz(6)
-  left_at                                      DateTime?     @db.Timestamptz(6)
-  added_by                                     BigInt?
-  created_at                                   DateTime      @default(now()) @db.Timestamptz(6)
-  updated_at                                   DateTime      @default(now()) @db.Timestamptz(6)
-  app_user_user_society_map_added_byToapp_user app_user?     @relation("user_society_map_added_byToapp_user", fields: [added_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  member_status                                member_status @relation(fields: [member_status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  society                                      society       @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  app_user_user_society_map_user_idToapp_user  app_user      @relation("user_society_map_user_idToapp_user", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@index([society_id, member_status_id], map: "idx_user_society_society_status")
-  @@index([user_id], map: "idx_user_society_user")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model contact_category {
-  id              Int               @id @db.SmallInt
-  code            String            @unique
-  name            String
-  sort_order      Int               @default(0) @db.SmallInt
-  is_active       Boolean           @default(true)
-  society_contact society_contact[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -597,59 +522,44 @@ model service_type {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model society_contact {
-  id                  BigInt           @id @default(autoincrement())
-  society_id          BigInt
-  contact_category_id Int              @db.SmallInt
-  name                String           @db.VarChar(120)
-  title               String?          @db.VarChar(60)
-  phone               String           @db.VarChar(20)
-  sort_order          Int              @default(0) @db.SmallInt
-  is_active           Boolean          @default(true)
-  created_by          BigInt?
-  created_at          DateTime         @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime         @default(now()) @db.Timestamptz(6)
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model society {
+  id                  BigInt              @id @default(autoincrement())
+  name                String              @db.VarChar(150)
+  society_type_id     Int                 @db.SmallInt
   country_id          BigInt
-  contact_category    contact_category @relation(fields: [contact_category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  country             country          @relation(fields: [country_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  app_user            app_user?        @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  society             society          @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-}
+  city_id             BigInt
+  address             String?
+  phone               String?             @db.VarChar(20)
+  email               String?             @db.VarChar(120)
+  pincode             String?             @db.VarChar(12)
+  latitude            Decimal?            @db.Decimal(9, 6)
+  longitude           Decimal?            @db.Decimal(9, 6)
+  registration_number String?             @db.VarChar(50)
+  is_active           Boolean             @default(true)
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime            @default(now()) @db.Timestamptz(6)
+  logo_upload_id      BigInt?
+  committee_term      committee_term[]
+  home_request        home_request[]
+  notice              notice[]
+  role                role[]
+  service_provider    service_provider[]
+  service_type        service_type[]
+  city                city                @relation(fields: [city_id, country_id], references: [id, country_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_society_city_country")
+  upload              upload?             @relation(fields: [logo_upload_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society_type        society_type        @relation(fields: [society_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society_activity    society_activity[]
+  society_contact     society_contact[]
+  society_module      society_module[]
+  structure           structure[]
+  ticket              ticket[]
+  ticket_counter      ticket_counter?
+  user_resident_map   user_resident_map[]
+  user_society_map    user_society_map[]
+  user_society_role   user_society_role[]
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model user_society_role {
-  id                                              BigInt          @id @default(autoincrement())
-  user_id                                         BigInt
-  role_id                                         Int
-  society_id                                      BigInt
-  start_date                                      DateTime        @default(dbgenerated("CURRENT_DATE")) @db.Date
-  end_date                                        DateTime?       @db.Date
-  is_active                                       Boolean         @default(true)
-  granted_by                                      BigInt?
-  ended_by                                        BigInt?
-  created_at                                      DateTime        @default(now()) @db.Timestamptz(6)
-  updated_at                                      DateTime        @default(now()) @db.Timestamptz(6)
-  term_id                                         BigInt?
-  app_user_user_society_role_ended_byToapp_user   app_user?       @relation("user_society_role_ended_byToapp_user", fields: [ended_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_ended_by_fkey")
-  app_user_user_society_role_granted_byToapp_user app_user?       @relation("user_society_role_granted_byToapp_user", fields: [granted_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_granted_by_fkey")
-  role                                            role            @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_role_id_fkey")
-  society                                         society         @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_society_id_fkey")
-  committee_term                                  committee_term? @relation(fields: [term_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  app_user_user_society_role_user_idToapp_user    app_user        @relation("user_society_role_user_idToapp_user", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "user_role_user_id_fkey")
-
-  @@index([society_id, role_id], map: "idx_user_society_role_society_role")
-  @@index([user_id], map: "idx_user_society_role_user")
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model module {
-  id             Int              @id @db.SmallInt
-  code           String           @unique
-  name           String
-  description    String?
-  sort_order     Int              @default(0) @db.SmallInt
-  is_active      Boolean          @default(true)
-  society_module society_module[]
+  @@index([country_id], map: "idx_society_country")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -679,6 +589,26 @@ model society_activity_type {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model society_contact {
+  id                  BigInt           @id @default(autoincrement())
+  society_id          BigInt
+  contact_category_id Int              @db.SmallInt
+  name                String           @db.VarChar(120)
+  title               String?          @db.VarChar(60)
+  phone               String           @db.VarChar(20)
+  sort_order          Int              @default(0) @db.SmallInt
+  is_active           Boolean          @default(true)
+  created_by          BigInt?
+  created_at          DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime         @default(now()) @db.Timestamptz(6)
+  country_id          BigInt
+  contact_category    contact_category @relation(fields: [contact_category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  country             country          @relation(fields: [country_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user            app_user?        @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society             society          @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model society_module {
   society_id BigInt
   module_id  Int       @db.SmallInt
@@ -691,6 +621,16 @@ model society_module {
   app_user   app_user? @relation(fields: [updated_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@id([society_id, module_id])
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model society_type {
+  id         Int       @id @db.SmallInt
+  code       String    @unique
+  name       String
+  sort_order Int       @default(0) @db.SmallInt
+  is_active  Boolean   @default(true)
+  society    society[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -707,44 +647,51 @@ model state {
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model user_platform_role {
-  id                                               BigInt    @id @default(autoincrement())
-  user_id                                          BigInt
-  role_id                                          Int
-  start_date                                       DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
-  end_date                                         DateTime? @db.Date
-  is_active                                        Boolean   @default(true)
-  granted_by                                       BigInt?
-  ended_by                                         BigInt?
-  created_at                                       DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at                                       DateTime  @default(now()) @db.Timestamptz(6)
-  app_user_user_platform_role_ended_byToapp_user   app_user? @relation("user_platform_role_ended_byToapp_user", fields: [ended_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  app_user_user_platform_role_granted_byToapp_user app_user? @relation("user_platform_role_granted_byToapp_user", fields: [granted_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  role                                             role      @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  app_user_user_platform_role_user_idToapp_user    app_user  @relation("user_platform_role_user_idToapp_user", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+model structure {
+  id                                               BigInt                       @id @default(autoincrement())
+  society_id                                       BigInt
+  parent_id                                        BigInt?
+  structure_type_id                                Int                          @db.SmallInt
+  identifier                                       String                       @db.VarChar(50)
+  floor_number                                     Int?                         @db.SmallInt
+  sort_order                                       Int                          @default(0)
+  building_id                                      BigInt?
+  floor_id                                         BigInt?
+  full_address                                     String?
+  is_active                                        Boolean                      @default(true)
+  created_at                                       DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at                                       DateTime                     @default(now()) @db.Timestamptz(6)
+  home_request                                     home_request[]
+  notice_building                                  notice_building[]
+  service_provider_household                       service_provider_household[]
+  service_provider_review                          service_provider_review[]
+  structure_structure_building_idTostructure       structure?                   @relation("structure_building_idTostructure", fields: [building_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_structure_structure_building_idTostructure structure[]                  @relation("structure_building_idTostructure")
+  structure_structure_floor_idTostructure          structure?                   @relation("structure_floor_idTostructure", fields: [floor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_structure_structure_floor_idTostructure    structure[]                  @relation("structure_floor_idTostructure")
+  structure_structure_parent_idTostructure         structure?                   @relation("structure_parent_idTostructure", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_structure_structure_parent_idTostructure   structure[]                  @relation("structure_parent_idTostructure")
+  society                                          society                      @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  structure_type                                   structure_type               @relation(fields: [structure_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket                                           ticket[]
+  user_resident_map                                user_resident_map[]
 
-  @@index([role_id], map: "idx_user_platform_role_role")
+  @@index([building_id], map: "idx_structure_building")
+  @@index([floor_id], map: "idx_structure_floor")
+  @@index([parent_id], map: "idx_structure_parent")
+  @@index([society_id, structure_type_id, sort_order], map: "idx_structure_society_type")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
-model committee_term {
-  id                                           BigInt              @id @default(autoincrement())
-  society_id                                   BigInt
-  name                                         String
-  start_date                                   DateTime            @db.Date
-  end_date                                     DateTime?           @db.Date
-  closed_at                                    DateTime?           @db.Timestamptz(6)
-  closed_by                                    BigInt?
-  created_by                                   BigInt?
-  created_at                                   DateTime            @default(now()) @db.Timestamptz(6)
-  updated_at                                   DateTime            @default(now()) @db.Timestamptz(6)
-  app_user_committee_term_closed_byToapp_user  app_user?           @relation("committee_term_closed_byToapp_user", fields: [closed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  app_user_committee_term_created_byToapp_user app_user?           @relation("committee_term_created_byToapp_user", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  society                                      society             @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  user_society_role                            user_society_role[]
-
-  @@index([society_id, start_date(sort: Desc)], map: "idx_committee_term_society_start")
+model structure_type {
+  id          Int         @id @db.SmallInt
+  code        String      @unique
+  name        String
+  is_building Boolean     @default(false)
+  is_unit     Boolean     @default(false)
+  sort_order  Int         @default(0) @db.SmallInt
+  is_active   Boolean     @default(true)
+  structure   structure[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -915,4 +862,134 @@ model ticket_status {
   is_active    Boolean        @default(true)
   ticket       ticket[]
   ticket_event ticket_event[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model upload {
+  id                    BigInt                  @id @default(autoincrement())
+  user_id               BigInt
+  upload_purpose_id     Int                     @db.SmallInt
+  file_name             String                  @db.VarChar(255)
+  content_type          String                  @db.VarChar(100)
+  size_bytes            BigInt
+  storage_key           String                  @unique(map: "uq_upload_storage_key") @db.VarChar(500)
+  agreement_start       DateTime?               @db.Date
+  agreement_end         DateTime?               @db.Date
+  attached_at           DateTime?               @db.Timestamptz(6)
+  created_at            DateTime                @default(now()) @db.Timestamptz(6)
+  home_request_document home_request_document[]
+  notice                notice[]
+  notice_attachment     notice_attachment[]
+  society               society[]
+  ticket_comment_photo  ticket_comment_photo[]
+  ticket_photo          ticket_photo[]
+  upload_purpose        upload_purpose          @relation(fields: [upload_purpose_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user              app_user                @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_upload_user")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model upload_purpose {
+  id                    Int      @id @db.SmallInt
+  code                  String   @unique
+  name                  String
+  allowed_content_types String[]
+  max_mb                Int      @db.SmallInt
+  sort_order            Int      @default(0) @db.SmallInt
+  is_active             Boolean  @default(true)
+  upload                upload[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_platform_role {
+  id                                               BigInt    @id @default(autoincrement())
+  user_id                                          BigInt
+  role_id                                          Int
+  start_date                                       DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
+  end_date                                         DateTime? @db.Date
+  is_active                                        Boolean   @default(true)
+  granted_by                                       BigInt?
+  ended_by                                         BigInt?
+  created_at                                       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                                       DateTime  @default(now()) @db.Timestamptz(6)
+  app_user_user_platform_role_ended_byToapp_user   app_user? @relation("user_platform_role_ended_byToapp_user", fields: [ended_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_user_platform_role_granted_byToapp_user app_user? @relation("user_platform_role_granted_byToapp_user", fields: [granted_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role                                             role      @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_user_platform_role_user_idToapp_user    app_user  @relation("user_platform_role_user_idToapp_user", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([role_id], map: "idx_user_platform_role_role")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_resident_map {
+  id                   BigInt            @id @default(autoincrement())
+  user_id              BigInt
+  unit_id              BigInt
+  society_id           BigInt
+  resident_role_id     Int               @db.SmallInt
+  resident_relation_id Int               @db.SmallInt
+  occupancy_status_id  Int               @db.SmallInt
+  home_request_id      BigInt?
+  move_in_date         DateTime?         @db.Date
+  move_out_date        DateTime?         @db.Date
+  is_active            Boolean           @default(true)
+  created_at           DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime          @default(now()) @db.Timestamptz(6)
+  home_request         home_request?     @relation(fields: [home_request_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  occupancy_status     occupancy_status  @relation(fields: [occupancy_status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resident_relation    resident_relation @relation(fields: [resident_relation_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resident_role        resident_role     @relation(fields: [resident_role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society              society           @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  structure            structure         @relation(fields: [unit_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user             app_user          @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([society_id, occupancy_status_id], map: "idx_user_resident_society_occupancy")
+  @@index([unit_id], map: "idx_user_resident_unit")
+  @@index([user_id], map: "idx_user_resident_user")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_society_map {
+  id                                           BigInt        @id @default(autoincrement())
+  user_id                                      BigInt
+  society_id                                   BigInt
+  member_status_id                             Int           @db.SmallInt
+  joined_at                                    DateTime      @default(now()) @db.Timestamptz(6)
+  left_at                                      DateTime?     @db.Timestamptz(6)
+  added_by                                     BigInt?
+  created_at                                   DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at                                   DateTime      @default(now()) @db.Timestamptz(6)
+  app_user_user_society_map_added_byToapp_user app_user?     @relation("user_society_map_added_byToapp_user", fields: [added_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  member_status                                member_status @relation(fields: [member_status_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society                                      society       @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_user_society_map_user_idToapp_user  app_user      @relation("user_society_map_user_idToapp_user", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([society_id, member_status_id], map: "idx_user_society_society_status")
+  @@index([user_id], map: "idx_user_society_user")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model user_society_role {
+  id                                              BigInt          @id @default(autoincrement())
+  user_id                                         BigInt
+  role_id                                         Int
+  society_id                                      BigInt
+  start_date                                      DateTime        @default(dbgenerated("CURRENT_DATE")) @db.Date
+  end_date                                        DateTime?       @db.Date
+  is_active                                       Boolean         @default(true)
+  granted_by                                      BigInt?
+  ended_by                                        BigInt?
+  created_at                                      DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at                                      DateTime        @default(now()) @db.Timestamptz(6)
+  term_id                                         BigInt?
+  app_user_user_society_role_ended_byToapp_user   app_user?       @relation("user_society_role_ended_byToapp_user", fields: [ended_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_user_society_role_granted_byToapp_user app_user?       @relation("user_society_role_granted_byToapp_user", fields: [granted_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role                                            role            @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  society                                         society         @relation(fields: [society_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  committee_term                                  committee_term? @relation(fields: [term_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  app_user_user_society_role_user_idToapp_user    app_user        @relation("user_society_role_user_idToapp_user", fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([society_id, role_id], map: "idx_user_society_role_society_role")
+  @@index([user_id], map: "idx_user_society_role_user")
 }
